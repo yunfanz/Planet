@@ -36,8 +36,7 @@ def load_image(directory):
     for filename in files:
         img = skimage.io.imread(filename, plugin='tifffile').astype(np.float32)
         #img = (img - 4000.)/5000. 
-        img *= (256./10000)
-        img -= 128
+        img *= (1./10000)
         img_id = filename.split('/')[-1].split('.')[0]
         yield img, img_id
 

@@ -62,7 +62,6 @@ class RESNET(object):
             x = conv(x, self.c, self.dim)
             x = bn(x, self.c)
             x = activation(x)
-        return x
 
         with tf.variable_scope('scale2'):
             x = max_pool(x, ksize=3, stride=2, dim=self.dim)

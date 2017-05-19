@@ -12,7 +12,7 @@ tf.app.flags.DEFINE_string('train_dir', './tmp/resnet_train/',
                            """and checkpoint.""")
 tf.app.flags.DEFINE_string('data_dir', 'Data/train/',
                            """Directory where data is located""")
-tf.app.flags.DEFINE_float('learning_rate', 0.01, "learning rate.")
+tf.app.flags.DEFINE_float('learning_rate', 0.001, "learning rate.")
 tf.app.flags.DEFINE_integer('batch_size', 4, "batch size")
 tf.app.flags.DEFINE_integer('num_per_epoch', None, "max steps per epoch")
 tf.app.flags.DEFINE_integer('epoch', 1, "number of epochs to train")
@@ -22,6 +22,67 @@ tf.app.flags.DEFINE_boolean('is_training', True,
                             'resume from latest saved state')
 tf.app.flags.DEFINE_boolean('minimal_summaries', True,
                             'produce fewer summaries to save HD space')
+
+def weight_variable(shape):
+  initial = tf.truncated_normal(shape, stddev=0.1)
+  return tf.Variable(initial)
+
+def bias_variable(shape):
+  initial = tf.constant(0.1, shape=shape)
+  return tf.Variable(initial)
+def conv2d(x, W):
+  return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+
+def max_pool_2x2(x):
+  return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
+                        strides=[1, 2, 2, 1], padding='SAME')
+
+class SIMPLENET(object):
+    def __init__(self, sess):
+        self.sess = sess
+
+    def inference(self, x):
+        with tf.variable_scope("conv1"):
+            W = weight_variable([7, 7, 4, 16])
+            b = bias_variable([16])
+            x = tf.nn.relu(conv2d(x, W) + b)
+            x = max_pool_2x2(x)
+        with tf.variable_scope("conv2"):
+            W = weight_variable([5, 5, 16, 32])
+            b = bias_variable([32])
+            x = tf.nn.relu(conv2d(x, W) + b)
+            x = max_pool_2x2(x)
+        with tf.variable_scope("conv3"):
+            W = weight_variable([3, 3, 32, 16])
+            b = bias_variable([16])
+            x = tf.nn.relu(conv2d(x, W) + b)
+            x = max_pool_2x2(x)
+        with tf.variable_scope("fc1"):
+            W_fc1 = weight_variable([32*32*16, 1024])
+            b_fc1 = bias_variable([1024])
+            x = tf.reshape(x, [-1, 32*32*16])
+            x = tf.nn.relu(tf.matmul(x, W_fc1) + b_fc1)
+        with tf.variable_scope("dropout"):
+            #keep_prob = tf.placeholder(tf.float32)
+            x = tf.nn.dropout(x, 0.5)
+        with tf.variable_scope("fc2"):
+            W_fc2 = weight_variable([1024, 4])
+            b_fc2 = bias_variable([4])
+            x = tf.matmul(x, W_fc2) + b_fc2
+        return x
+    def loss(self, logits, labels):
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, labels)
+        cross_entropy_mean = tf.reduce_mean(cross_entropy)
+     
+        regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+
+        loss_ = tf.add_n([cross_entropy_mean] + regularization_losses)
+        tf.scalar_summary('loss', loss_)
+
+        return loss_
+
+
+
 def top_k_error(predictions, labels, k):
     batch_size = float(FLAGS.batch_size) #tf.shape(predictions)[0]
     in_top1 = tf.to_float(tf.nn.in_top_k(predictions, labels, k=1))
@@ -73,6 +134,7 @@ def test(sess, net, is_training, validation=False):
     
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     reader.start_threads(sess)
+
     try:
         if FLAGS.num_per_epoch:
             batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
@@ -137,7 +199,7 @@ def train(sess, net, is_training):
         train_batch = tf.transpose(train_batch, [2,1,0])  #treat slice index as sub_batch index
     #import IPython; IPython.embed()
     logits = net.inference(train_batch)
-    import IPython; IPython.embed() 
+    #import IPython; IPython.embed() 
     loss_ = net.loss(logits, labels)
     predictions = tf.nn.softmax(logits)
     #import IPython; IPython.embed()
@@ -224,7 +286,7 @@ def train(sess, net, is_training):
 
                 assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
 
-                if step % 1 == 0:
+                if step % 20 == 0:
                     examples_per_sec = FLAGS.batch_size / float(duration)
                     format_str = ('Epoch %d, [%d / %d], loss = %.2f (%.1f examples/sec; %.3f '
                                   'sec/batch)')
@@ -235,12 +297,12 @@ def train(sess, net, is_training):
                     summary_writer.add_summary(summary_str, step)
 
                 # Save the model checkpoint periodically.
-                if step > 1 and step % 100 == 0:
+                if step > 1 and step % 1000 == 0:
                     checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=global_step)
 
                 # Run validation periodically
-                if step > 1 and step % 10 == 0:
+                if step > 1 and step % 100 == 0:
                     _, top1_error_value = sess.run([val_op, top1_error], { is_training: False })
                     #pp, ll = sess.run([predictions, labels], {is_training:False})
                     #print('Predictions: ', pp)
@@ -315,14 +377,7 @@ def main(_):
     #sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
     
     is_training = tf.placeholder('bool', [], name='is_training')
-    weather_net = RESNET(sess, 
-                dim=2,
-                num_classes=4,
-                num_blocks=[3, 4, 3],  # first chan is not a block
-                num_chans=[8,8,16,32],
-                use_bias=False, # defaults to using batch norm
-                bottleneck=True,
-                is_training=True)
+    weather_net = SIMPLENET(sess)
     
     train(sess, weather_net, is_training)
 
