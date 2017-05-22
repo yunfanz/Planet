@@ -12,7 +12,7 @@ tf.app.flags.DEFINE_string('train_dir', './tmp/resnet_train/',
                            """and checkpoint.""")
 tf.app.flags.DEFINE_string('data_dir', 'Data/train/',
                            """Directory where data is located""")
-tf.app.flags.DEFINE_float('learning_rate', 0.01, "learning rate.")
+tf.app.flags.DEFINE_float('learning_rate', 0.001, "learning rate.")
 tf.app.flags.DEFINE_integer('batch_size', 4, "batch size")
 tf.app.flags.DEFINE_integer('num_per_epoch', None, "max steps per epoch")
 tf.app.flags.DEFINE_integer('epoch', 1, "number of epochs to train")
@@ -20,7 +20,7 @@ tf.app.flags.DEFINE_boolean('resume', False,
                             'resume from latest saved state')
 tf.app.flags.DEFINE_boolean('is_training', True,
                             'resume from latest saved state')
-tf.app.flags.DEFINE_boolean('minimal_summaries', True,
+tf.app.flags.DEFINE_boolean('minimal_summaries', False,
                             'produce fewer summaries to save HD space')
 def top_k_error(predictions, labels, k):
     batch_size = float(FLAGS.batch_size) #tf.shape(predictions)[0]
@@ -137,7 +137,7 @@ def train(sess, net, is_training):
         train_batch = tf.transpose(train_batch, [2,1,0])  #treat slice index as sub_batch index
     #import IPython; IPython.embed()
     logits = net.inference(train_batch)
-    import IPython; IPython.embed() 
+    #import IPython; IPython.embed() 
     loss_ = net.loss(logits, labels)
     predictions = tf.nn.softmax(logits)
     #import IPython; IPython.embed()
@@ -168,7 +168,7 @@ def train(sess, net, is_training):
 
     if not FLAGS.minimal_summaries:
         # Display the training images in the visualizer.
-        tf.image_summary('images', images)
+        #tf.image_summary('images', images)
 
         for var in tf.trainable_variables():
             tf.histogram_summary(var.op.name, var)
@@ -224,7 +224,7 @@ def train(sess, net, is_training):
 
                 assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
 
-                if step % 1 == 0:
+                if step % 10 == 0:
                     examples_per_sec = FLAGS.batch_size / float(duration)
                     format_str = ('Epoch %d, [%d / %d], loss = %.2f (%.1f examples/sec; %.3f '
                                   'sec/batch)')
@@ -235,12 +235,12 @@ def train(sess, net, is_training):
                     summary_writer.add_summary(summary_str, step)
 
                 # Save the model checkpoint periodically.
-                if step > 1 and step % 100 == 0:
+                if step > 1 and step % 500 == 0:
                     checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=global_step)
 
                 # Run validation periodically
-                if step > 1 and step % 10 == 0:
+                if step > 1 and step % 100 == 0:
                     _, top1_error_value = sess.run([val_op, top1_error], { is_training: False })
                     #pp, ll = sess.run([predictions, labels], {is_training:False})
                     #print('Predictions: ', pp)
@@ -299,7 +299,7 @@ def load_images(coord, data_dir):
         data_dir,
         coord,
         pattern='*.tif',
-        queue_size=32, 
+        queue_size=64, 
         q_shape=SP2_BOX, 
         n_threads=1)
 

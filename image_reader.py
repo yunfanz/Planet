@@ -117,8 +117,7 @@ class Reader(object):
                     #TODO:  Perform quality check if needed
                     pass
 
-                else:
-                    sess.run(self.enqueue,
+                sess.run(self.enqueue,
                              feed_dict={self.sample_placeholder: img, self.label_placeholder: label})
                     
     def start_threads(self, sess):

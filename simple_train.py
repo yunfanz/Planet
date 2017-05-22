@@ -13,23 +13,25 @@ tf.app.flags.DEFINE_string('train_dir', './tmp/resnet_train/',
 tf.app.flags.DEFINE_string('data_dir', 'Data/train/',
                            """Directory where data is located""")
 tf.app.flags.DEFINE_float('learning_rate', 0.001, "learning rate.")
-tf.app.flags.DEFINE_integer('batch_size', 4, "batch size")
+tf.app.flags.DEFINE_integer('batch_size', 16, "batch size")
 tf.app.flags.DEFINE_integer('num_per_epoch', None, "max steps per epoch")
 tf.app.flags.DEFINE_integer('epoch', 1, "number of epochs to train")
 tf.app.flags.DEFINE_boolean('resume', False,
                             'resume from latest saved state')
 tf.app.flags.DEFINE_boolean('is_training', True,
                             'resume from latest saved state')
-tf.app.flags.DEFINE_boolean('minimal_summaries', True,
+tf.app.flags.DEFINE_boolean('minimal_summaries', False,
                             'produce fewer summaries to save HD space')
 
 def weight_variable(shape):
-  initial = tf.truncated_normal(shape, stddev=0.1)
-  return tf.Variable(initial)
+  #initial = tf.truncated_normal(shape, stddev=0.1)
+  #return tf.Variable(initial, name='weight')
+  return tf.get_variable("weight", shape=shape,
+           initializer=tf.contrib.layers.xavier_initializer(uniform=False))
 
 def bias_variable(shape):
   initial = tf.constant(0.1, shape=shape)
-  return tf.Variable(initial)
+  return tf.Variable(initial, name='bias')
 def conv2d(x, W):
   return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
 
@@ -43,24 +45,29 @@ class SIMPLENET(object):
 
     def inference(self, x):
         with tf.variable_scope("conv1"):
-            W = weight_variable([7, 7, 4, 16])
-            b = bias_variable([16])
+            W = weight_variable([7, 7, 4, 8])
+            b = bias_variable([8])
             x = tf.nn.relu(conv2d(x, W) + b)
             x = max_pool_2x2(x)
         with tf.variable_scope("conv2"):
-            W = weight_variable([5, 5, 16, 32])
-            b = bias_variable([32])
+            W = weight_variable([5, 5, 8, 16])
+            b = bias_variable([16])
+            x = tf.nn.relu(conv2d(x, W) + b)
+            x = max_pool_2x2(x)
+        with tf.variable_scope("conv2half"):
+            W = weight_variable([5, 5, 16, 16])
+            b = bias_variable([16])
             x = tf.nn.relu(conv2d(x, W) + b)
             x = max_pool_2x2(x)
         with tf.variable_scope("conv3"):
-            W = weight_variable([3, 3, 32, 16])
+            W = weight_variable([3, 3, 16, 16])
             b = bias_variable([16])
             x = tf.nn.relu(conv2d(x, W) + b)
             x = max_pool_2x2(x)
         with tf.variable_scope("fc1"):
-            W_fc1 = weight_variable([32*32*16, 1024])
+            W_fc1 = weight_variable([16*16*16, 1024])
             b_fc1 = bias_variable([1024])
-            x = tf.reshape(x, [-1, 32*32*16])
+            x = tf.reshape(x, [-1, 16*16*16])
             x = tf.nn.relu(tf.matmul(x, W_fc1) + b_fc1)
         with tf.variable_scope("dropout"):
             #keep_prob = tf.placeholder(tf.float32)
@@ -76,7 +83,7 @@ class SIMPLENET(object):
      
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
 
-        loss_ = tf.add_n([cross_entropy_mean] + regularization_losses)
+        loss_ = cross_entropy_mean + 0.01*tf.reduce_sum(regularization_losses)
         tf.scalar_summary('loss', loss_)
 
         return loss_
@@ -220,7 +227,7 @@ def train(sess, net, is_training):
     tf.scalar_summary('learning_rate', FLAGS.learning_rate)
     ###
     #opt = tf.train.MomentumOptimizer(FLAGS.learning_rate, MOMENTUM)
-    opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate,beta1=0.9, beta2=0.999, epsilon=1e-8)
+    opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate,beta1=0.5, beta2=0.999, epsilon=1e-8)
     ###
     grads = opt.compute_gradients(loss_)
     for grad, var in grads:
@@ -230,7 +237,7 @@ def train(sess, net, is_training):
 
     if not FLAGS.minimal_summaries:
         # Display the training images in the visualizer.
-        tf.image_summary('images', images)
+        #tf.image_summary('images', images)
 
         for var in tf.trainable_variables():
             tf.histogram_summary(var.op.name, var)
@@ -361,7 +368,7 @@ def load_images(coord, data_dir):
         data_dir,
         coord,
         pattern='*.tif',
-        queue_size=32, 
+        queue_size=100, 
         q_shape=SP2_BOX, 
         n_threads=1)
 
