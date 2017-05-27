@@ -1,5 +1,5 @@
 import tensorflow as tf
-from resnet import RESNET, UPDATE_OPS_COLLECTION, RESNET_VARIABLES, MOVING_AVERAGE_DECAY
+from multi_net import RESNET, UPDATE_OPS_COLLECTION, RESNET_VARIABLES, MOVING_AVERAGE_DECAY
 from image_reader import Reader, get_corpus_size
 import numpy as np
 import os
@@ -7,7 +7,7 @@ import time
 MOMENTUM = 0.9
 SP2_BOX = (256,256,4)
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string('train_dir', './tmp/resnet_train/',
+tf.app.flags.DEFINE_string('train_dir', './tmp/multi_train/',
                            """Directory where to write event logs """
                            """and checkpoint.""")
 tf.app.flags.DEFINE_string('data_dir', 'Data/train/',
@@ -133,15 +133,15 @@ def train(sess, net, is_training):
                                   initializer=tf.constant_initializer(0),
                                   trainable=False)
 
-    if False:
-        train_batch = tf.transpose(train_batch, [2,1,0])  #treat slice index as sub_batch index
-    #import IPython; IPython.embed()
-    logits = net.inference(train_batch)
+    
+    logits_weather, logits_multi = net.inference(train_batch)
     #import IPython; IPython.embed() 
-    loss_ = net.loss(logits, labels)
-    predictions = tf.nn.softmax(logits)
+    wloss_ = net.loss(logits_weather, labels[:,0], name='weather_loss')
+    mloss_ = tf.add_n([net.loss(logits_multi[:,i], labels[:,i+1], name='multi_loss'+str(i)) for i in range(13)])
+    loss_ = wloss_ + 0.2 * mloss_
+    predictions = tf.nn.softmax(logits_weather)
     #import IPython; IPython.embed()
-    top1_error = top_k_error(predictions, labels, 1)
+    top1_error = top_k_error(predictions, labels[:,0], 1)
 
 
     # loss_avg
@@ -318,7 +318,8 @@ def main(_):
     is_training = tf.placeholder('bool', [], name='is_training')
     weather_net = RESNET(sess, 
                 dim=2,
-                num_classes=4,
+                num_weather=4,
+                num_classes=13,
                 num_blocks=[3, 4, 3],  # first chan is not a block
                 num_chans=[16,16,32,64],
                 use_bias=False, # defaults to using batch norm

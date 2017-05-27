@@ -7,7 +7,7 @@ import time
 MOMENTUM = 0.9
 SP2_BOX = (256,256,4)
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string('train_dir', './tmp/resnet_train/',
+tf.app.flags.DEFINE_string('train_dir', './tmp/simple_train/',
                            """Directory where to write event logs """
                            """and checkpoint.""")
 tf.app.flags.DEFINE_string('data_dir', 'Data/train/',

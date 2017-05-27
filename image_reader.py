@@ -54,11 +54,44 @@ def get_weather(labels):
         print(labels)
         #raise Exception("weather info not available")
         return 3
+def get_multi(labels):
+    lab = np.zeros(14)
+    lab[0] = get_weather(labels)
+    if "primary" in labels:
+        lab[1] = 1
+    if "agriculture" in labels:
+        lab[2] = 1
+    if "water" in labels:
+        lab[3] = 1
+    if "road" in labels:
+        lab[4] = 1
+    if "cultivation" in labels:
+        lab[5] = 1
+    if "habitation" in labels:
+        lab[6] = 1
+    if "bare_ground" in labels:
+        lab[7] = 1
+    if "slash_burn" in labels:
+        lab[8] = 1
+    if "conventional_mine" in labels:
+        lab[9] = 1
+    if "artisinal_mine" in labels:
+        lab[10] = 1
+    if "selective_logging" in labels:
+        lab[11] = 1
+    if "blooming" in labels:
+        lab[12] = 1
+    if "blow_down" in labels:
+        lab[13] = 1
+    return lab
 
-def load_label_df(filename):
+def load_label_df(filename, multi=True):
     df_train = pandas.DataFrame.from_csv(filename)
-    df_train['labels'] = df_train['tags'].apply(lambda x: x.split(' '))
-    df_train['weather'] = df_train['labels'].apply(lambda row: get_weather(row))
+    df_train['slabels'] = df_train['tags'].apply(lambda x: x.split(' '))
+    if multi:
+        df_train['labels'] = df_train['slabels'].apply(lambda row: get_multi(row))
+    else:
+        df_train['labels'] = df_train['labels'].apply(lambda row: get_weather(row))
     return df_train
 
 
@@ -71,9 +104,12 @@ class Reader(object):
                  coord,
                  threshold=None,
                  queue_size=16, 
+                 min_after_dequeue=4,
                  q_shape=None,
                  pattern='*.tif', 
-                 n_threads=1):
+                 n_threads=1,
+                 multi=True,
+                 label_file="./Data/train/train_v2.csv"):
         self.data_dir = data_dir
         self.coord = coord
         self.n_threads = n_threads
@@ -81,17 +117,24 @@ class Reader(object):
         self.ftype = pattern
         self.corpus_size = get_corpus_size(self.data_dir, pattern=self.ftype)
         self.threads = []
+        self.multi = multi
         self.sample_placeholder = tf.placeholder(dtype=tf.float32, shape=None)
-        self.label_placeholder = tf.placeholder(dtype=tf.int32, shape=[], name='label') #!!!
+        if multi:
+            self.label_shape =[14]
+        else:
+            self.label_shape = []
+        self.label_placeholder = tf.placeholder(dtype=tf.int32, shape=self.label_shape, name='label') #!!!
         if q_shape:
-            self.queue = tf.FIFOQueue(queue_size,[tf.float32,tf.int32], shapes=[q_shape,[]])
+            #self.queue = tf.FIFOQueue(queue_size,[tf.float32,tf.int32], shapes=[q_shape,[]])
+            self.queue = tf.RandomShuffleQueue(queue_size, min_after_dequeue,
+                [tf.float32,tf.int32], shapes=[q_shape, self.label_shape])
         else:
             self.q_shape = [(1, None, None, 4)]
             self.queue = tf.PaddingFIFOQueue(queue_size,
                                              [tf.float32, tf.int32],
-                                             shapes=[self.q_shape,[]])
+                                             shapes=[self.q_shape,self.label_shape])
         self.enqueue = self.queue.enqueue([self.sample_placeholder, self.label_placeholder])
-        self.labels_df = load_label_df("./Data/train/train_v2.csv")
+        self.labels_df = load_label_df(label_file, multi=multi)
 
     def dequeue(self, num_elements):
         images, labels = self.queue.dequeue_many(num_elements)
@@ -106,7 +149,7 @@ class Reader(object):
             for img, img_id in iterator:
                 #print(filename)
                 try: 
-                    label = self.labels_df['weather'][img_id]
+                    label = self.labels_df['labels'][img_id]
                 except(KeyError):
                     print('No match for ', img_id)
                     continue

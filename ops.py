@@ -156,7 +156,7 @@ def fc(x, c):
     num_units_out = c['fc_units_out']
     #weights_initializer = tf.truncated_normal_initializer(
         #stddev=FC_WEIGHT_STDDEV)
-    weights_initializer = tf.contrib.layers.xavier_initializer(uniform=False)
+    weights_initializer = tf.contrib.layers.xavier_initializer(uniform=True)
 
     weights = _get_variable('weights',
                             shape=[num_units_in, num_units_out],
@@ -202,7 +202,7 @@ def conv(x, c, dim=2):
     elif dim ==3:
         shape = [ksize, ksize, ksize, filters_in, filters_out]
     #initializer = tf.truncated_normal_initializer(stddev=CONV_WEIGHT_STDDEV)
-    initializer = tf.contrib.layers.xavier_initializer(uniform=False)
+    initializer = tf.contrib.layers.xavier_initializer(uniform=True)
     weights = _get_variable('weights',
                             shape=shape,
                             dtype='float',
