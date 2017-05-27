@@ -144,8 +144,13 @@ def train(sess, net, is_training):
     top1_error = top_k_error(predictions, labels[:,0], 1)
 
 
-    # loss_avg
     ema = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY, global_step)
+    tf.add_to_collection(UPDATE_OPS_COLLECTION, ema.apply([wloss_]))
+    tf.scalar_summary('wloss_avg', ema.average(wloss_))
+    
+    tf.add_to_collection(UPDATE_OPS_COLLECTION, ema.apply([mloss_]))
+    tf.scalar_summary('mloss_avg', ema.average(mloss_))
+    # loss_avg
     tf.add_to_collection(UPDATE_OPS_COLLECTION, ema.apply([loss_]))
     tf.scalar_summary('loss_avg', ema.average(loss_))
 
