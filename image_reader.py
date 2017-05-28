@@ -116,7 +116,7 @@ class Reader(object):
                  min_after_dequeue=4,
                  q_shape=None,
                  pattern='*.tif', 
-                 n_threads=2,
+                 n_threads=1,
                  multi=True,
                  label_file="./Data/train/train_v2.csv"):
         self.data_dir = data_dir

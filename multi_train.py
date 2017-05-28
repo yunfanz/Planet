@@ -113,7 +113,11 @@ def test(sess, net, is_training, validation=False):
         print('Finished, output see {}'.format(FLAGS.train_dir))
         coord.request_stop()
         coord.join(threads)
-
+def scoring(tp, fp, fn):
+    p = tp/(tp + fp)
+    r = tp/(tp + fn)
+    b = 2
+    return (1 + b**2)*(p*r)/(b**2*p + r)
 def train(sess, net, is_training):
 
     if not os.path.exists(FLAGS.train_dir):
