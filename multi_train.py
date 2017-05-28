@@ -119,13 +119,17 @@ def _scoring(tp, fp, fn):
     b = 2
     return (1 + b**2)*(p*r)/(b**2*p + r)
 
-def m_score(mlogits, labels):
+def get_m_score(mlogits, labels):
     tp, fn, fp = 0, 0, 0
     for i in range(13):
-        mpred = tf.round(tf.nn.softmax(logits_multi[:,i]))
-        tp += tf.reduce_sum(tf.multiply(mpred[:,1], labels[:,i+1]))
-        fp += tf.reduce_sum(tf.multiply(mpred[:,1], 1 - labels[:,i+1]))
-        fn += tf.reduce_sum(tf.multiply(1 - mpred[:,1], labels[:,i+1]))
+        mpred = tf.cast(tf.round(tf.nn.softmax(mlogits[:,i])), tf.int32)
+        #import IPython; IPython.embed()
+        tp += tf.reduce_sum(tf.mul(mpred[:,1], labels[:,i+1]))
+        fp += tf.reduce_sum(tf.mul(mpred[:,1], 1 - labels[:,i+1]))
+        fn += tf.reduce_sum(tf.mul(1 - mpred[:,1], labels[:,i+1]))
+        # tp += tf.tensordot(mpred[:,1], labels[:,i+1])
+        # fp += tf.tensordot(mpred[:,1], 1 - labels[:,i+1])
+        # fn += tf.tensordot(1 - mpred[:,1], labels[:,i+1])
 
     return _scoring(tp, fp, fn)
 
@@ -155,6 +159,7 @@ def train(sess, net, is_training):
     predictions = tf.nn.softmax(logits_weather)
     #import IPython; IPython.embed()
     top1_error = top_k_error(predictions, labels[:,0], 1)
+    m_score = get_m_score(logits_multi, labels)
 
 
     ema = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY, global_step)
@@ -169,9 +174,11 @@ def train(sess, net, is_training):
 
     # validation stats
     ema = tf.train.ExponentialMovingAverage(0.99, val_step)
-    val_op = tf.group(val_step.assign_add(1), ema.apply([top1_error]))
+    val_op = tf.group(val_step.assign_add(1), ema.apply([top1_error]), ema.apply([m_score]))
     top1_error_avg = ema.average(top1_error)
+    m_score_avg = ema.average(m_score)
     tf.scalar_summary('val_top1_error_avg', top1_error_avg)
+    tf.scalar_summary('m_score_avg', m_score_avg)
 
     tf.scalar_summary('learning_rate', FLAGS.learning_rate)
     ###
@@ -261,11 +268,11 @@ def train(sess, net, is_training):
 
                 # Run validation periodically
                 if step > 1 and step % 100 == 0:
-                    _, top1_error_value = sess.run([val_op, top1_error], { is_training: False })
+                    _, top1_error_value, mscore_value = sess.run([val_op, top1_error, m_score], { is_training: False })
                     #pp, ll = sess.run([predictions, labels], {is_training:False})
                     #print('Predictions: ', pp)
                     #print('labels: ', ll)
-                    print('Validation top1 error %.2f' % top1_error_value)
+                    print('weather top1 error {}, multi_score {}'.format(top1_error_value, mscore_value))
 
     except KeyboardInterrupt:
         # Introduce a line break after ^C is displayed so save message
