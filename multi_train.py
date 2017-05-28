@@ -113,11 +113,22 @@ def test(sess, net, is_training, validation=False):
         print('Finished, output see {}'.format(FLAGS.train_dir))
         coord.request_stop()
         coord.join(threads)
-def scoring(tp, fp, fn):
+def _scoring(tp, fp, fn):
     p = tp/(tp + fp)
     r = tp/(tp + fn)
     b = 2
     return (1 + b**2)*(p*r)/(b**2*p + r)
+
+def m_score(mlogits, labels):
+    tp, fn, fp = 0, 0, 0
+    for i in range(13):
+        mpred = tf.round(tf.nn.softmax(logits_multi[:,i]))
+        tp += tf.reduce_sum(tf.multiply(mpred[:,1], labels[:,i+1]))
+        fp += tf.reduce_sum(tf.multiply(mpred[:,1], 1 - labels[:,i+1]))
+        fn += tf.reduce_sum(tf.multiply(1 - mpred[:,1], labels[:,i+1]))
+
+    return _scoring(tp, fp, fn)
+
 def train(sess, net, is_training):
 
     if not os.path.exists(FLAGS.train_dir):
@@ -277,14 +288,15 @@ def get_predictions(weather_pred, mpred, weathers, classes):
     label_str = ' '.join(labels)
     return label_str.strip()
 
-def predict(sess, net, is_training):
+def predict(sess, net, is_training, prefix='test_', append=False):
 
     if not os.path.exists(FLAGS.train_dir):
         os.makedirs(FLAGS.train_dir)
     fname = FLAGS.train_dir+"/results.csv"
-    outfile = open(fname, 'w')
-    outfile.write("image_name,tags\n")
-    outfile.close()
+    if not append:
+        outfile = open(fname, 'w')
+        outfile.write("image_name,tags\n")
+        outfile.close()
     
     
     coord = tf.train.Coordinator()
@@ -325,7 +337,8 @@ def predict(sess, net, is_training):
             weather_scores, multi_scores, image_id = sess.run([wpred, mpred, img_id], { is_training: False })
             #import IPython; IPython.embed()
             label_str = get_predictions(weather_scores, multi_scores, weathers, classes)
-            outfile.write("test_"+str(image_id[0])+','+label_str+'\n')
+            print(prefix+str(image_id[0])+','+label_str+'\n')
+            outfile.write(prefix+str(image_id[0])+','+label_str+'\n')
 
             if i % 200 == 0:
                 print("{}/{}".format(i, corpus_size))
@@ -375,7 +388,7 @@ def main(_):
     if FLAGS.is_training:
         train(sess, net, is_training)
     else:
-        predict(sess, net, is_training)
+        predict(sess, net, is_training, prefix='test_', append=False)
 
 
 if __name__ == '__main__':
