@@ -183,7 +183,8 @@ def train(sess, net, is_training):
     tf.scalar_summary('learning_rate', FLAGS.learning_rate)
     ###
     #opt = tf.train.MomentumOptimizer(FLAGS.learning_rate, MOMENTUM)
-    opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate,beta1=0.9, beta2=0.999, epsilon=1e-8)
+    #opt = tf.train.GradientDescentOptimizer(learning_rate=FLAGS.learning_rate)
+    opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
     grads = opt.compute_gradients(loss_)
     #wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows
@@ -228,6 +229,8 @@ def train(sess, net, is_training):
     #import IPython; IPython.embed()
     try:
         for epoch in range(FLAGS.epoch):
+            if epoch % 7 == 0 and epoch > 1:
+                FLAGS.learning_rate /=  5. 
             if FLAGS.num_per_epoch:
                 batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
             else:
