@@ -20,19 +20,27 @@ def get_corpus_size(directory, pattern='*.tif'):
             files.append(os.path.join(root, filename))
     return len(files)
 
-def find_files(directory, pattern='*.tif'):
+def get_imgid(file):
+    return int(file.split('_')[-1].split('.')[0])
+
+def find_files(directory, pattern='*.tif', sortby="auto"):
     '''Recursively finds all files matching the pattern.'''
     files = []
     for root, dirnames, filenames in os.walk(directory):
         for filename in fnmatch.filter(filenames, pattern):
             files.append(os.path.join(root, filename))
-    return np.sort(files)
+    if sortby == "auto":
+        files = np.sort(files)
+    else:
+        files = sorted(files, key=lambda fname: get_imgid(fname))
+    return files
 
 
-def load_image(directory):
+
+def load_image(directory, sortby="img_id"):
     '''Generator that yields pixel_array from dataset, and
     additionally the ID of the corresponding patient.'''
-    files = find_files(directory)
+    files = find_files(directory, sortby=sortby)
     for filename in files:
         img = skimage.io.imread(filename, plugin='tifffile').astype(np.float32)
         #img = (img - 4000.)/5000. 
@@ -119,26 +127,30 @@ class Reader(object):
         self.corpus_size = get_corpus_size(self.data_dir, pattern=self.ftype)
         self.threads = []
         self.multi = multi
+        self.train = train
         self.sample_placeholder = tf.placeholder(dtype=tf.float32, shape=None)
-        if multi:
+        if multi and train:
             self.label_shape =[14]
         else:
             self.label_shape = []
         self.label_placeholder = tf.placeholder(dtype=tf.int32, shape=self.label_shape, name='label') #!!!
-        if q_shape:
-            #self.queue = tf.FIFOQueue(queue_size,[tf.float32,tf.int32], shapes=[q_shape,[]])
-            self.queue = tf.RandomShuffleQueue(queue_size, min_after_dequeue,
-                [tf.float32,tf.int32], shapes=[q_shape, self.label_shape])
-        else:
-            self.q_shape = [(1, None, None, 4)]
-            self.queue = tf.PaddingFIFOQueue(queue_size,
-                                             [tf.float32, tf.int32],
-                                             shapes=[self.q_shape,self.label_shape])
-        self.enqueue = self.queue.enqueue([self.sample_placeholder, self.label_placeholder])
-        if train:
+        
+        
+        if self.train:
             self.labels_df = load_label_df(label_file, multi=multi)
+            if q_shape:
+                #self.queue = tf.FIFOQueue(queue_size,[tf.float32,tf.int32], shapes=[q_shape,[]])
+                self.queue = tf.RandomShuffleQueue(queue_size, min_after_dequeue,
+                    [tf.float32,tf.int32], shapes=[q_shape, self.label_shape])
+            else:
+                self.q_shape = [(1, None, None, 4)]
+                self.queue = tf.PaddingFIFOQueue(queue_size,
+                                                 [tf.float32, tf.int32],
+                                                 shapes=[self.q_shape,self.label_shape])
         else:
             self.labels_df = None
+            self.queue = tf.FIFOQueue(queue_size,[tf.float32,tf.int32], shapes=[q_shape,[]])
+        self.enqueue = self.queue.enqueue([self.sample_placeholder, self.label_placeholder])
 
     def dequeue(self, num_elements):
         images, labels = self.queue.dequeue_many(num_elements)
@@ -152,11 +164,14 @@ class Reader(object):
             iterator = load_image(self.data_dir)
             for img, img_id in iterator:
                 #print(filename)
-                try: 
-                    label = self.labels_df['labels'][img_id]
-                except(KeyError):
-                    print('No match for ', img_id)
-                    continue
+                if self.train:
+                    try: 
+                        label = self.labels_df['labels'][img_id]
+                    except(KeyError):
+                        print('No match for ', img_id)
+                        continue
+                else:
+                    label = np.int32(img_id.split('_')[1])
                 if self.coord.should_stop():
                     stop = True
                     break

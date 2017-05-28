@@ -2,7 +2,7 @@ import tensorflow as tf
 from multi_net import RESNET, UPDATE_OPS_COLLECTION, RESNET_VARIABLES, MOVING_AVERAGE_DECAY
 from image_reader import Reader, get_corpus_size
 import numpy as np
-import os
+import os, sys
 import time
 MOMENTUM = 0.9
 SP2_BOX = (256,256,4)
@@ -262,37 +262,46 @@ def train(sess, net, is_training):
         coord.request_stop()
         coord.join(threads)
 
-def get_predictions(mlogits):
-    classes = ["primary", "agriculture", "water", "road", "cultivation", "habitation", "bare_ground", 
-                "slash_burn", "conventional_mine", "artisinal_mine", "selective_logging", 
-                "blooming", "blow_down"]
-    label_str = ""
-    for i in range(len(classes)):
-        prediction = tf.nn.softmax(mlogits[:,i])
-        if prediction[1]> 0.5:
-            label_str += classes[i] + ' '
-    return label_str
+def get_predictions(weather_pred, mpred, weathers, classes):
 
-def predict(sess, net):
+    label_str= weathers[np.argmax(weather_pred)] + ' '
+    for i in range(len(classes)):
+        prediction = mpred[i]
+        if prediction[1]> 0.3:
+            label_str += classes[i] + ' '
+    labels = sorted(label_str.split(' '))
+    label_str = ' '.join(labels)
+    return label_str.strip()
+
+def predict(sess, net, is_training):
 
     if not os.path.exists(FLAGS.train_dir):
         os.makedirs(FLAGS.train_dir)
+    fname = FLAGS.train_dir+"/results.csv"
+    outfile = open(fname, 'w')
+    outfile.write("image_name,tags\n")
+    outfile.close()
+    
     
     coord = tf.train.Coordinator()
-    reader = load_images(coord, FLAGS.data_dir)
+    reader = load_images(coord, FLAGS.data_dir, train=False)
     corpus_size = reader.corpus_size
     #import IPython; IPython.embed()
-    train_batch, labels = reader.dequeue(FLAGS.batch_size)
+    test_batch, img_id = reader.dequeue(1)
     global_step = tf.get_variable('global_step', [],
                                   initializer=tf.constant_initializer(0),
                                   trainable=False)
 
-    if False:
-        train_batch = tf.transpose(train_batch, [3,1,2,0])  #treat slice index as sub_batch index
+    wlogits, mlogits = net.inference(test_batch)
+    wpred = tf.nn.softmax(wlogits)
+    mpred = [tf.nn.softmax(mlogits[0, i]) for i in range(13)]
+    weathers = ["cloudy", "partly_cloudy", "haze", "clear"]
+    classes = ["primary", "agriculture", "water", "road", "cultivation", "habitation", "bare_ground", 
+                "slash_burn", "conventional_mine", "artisinal_mine", "selective_logging", 
+                "blooming", "blow_down"]
+    # label_str = get_predictions(wpred, mpred, weathers, classes)
 
-    logits = net.inference(train_batch)
-    #predictions = tf.nn.softmax(logits)
-    label_str = get_predictions(logits[:,1:])
+    
     init = tf.initialize_all_variables()
     #import IPython; IPython.embed()
     sess.run(init)
@@ -306,8 +315,24 @@ def predict(sess, net):
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     reader.start_threads(sess)
 
+    outfile = open(fname, 'a')
+    try:
+        for i in range(corpus_size):
+            weather_scores, multi_scores, image_id = sess.run([wpred, mpred, img_id], { is_training: False })
+            #import IPython; IPython.embed()
+            label_str = get_predictions(weather_scores, multi_scores, weathers, classes)
+            outfile.write("test_"+str(image_id[0])+','+label_str+'\n')
 
-def load_images(coord, data_dir):
+            if i % 200 == 0:
+                print("{}/{}".format(i, corpus_size))
+    finally:
+        print('Finished, output see {}'.format(fname))
+        coord.request_stop()
+        coord.join(threads)
+        outfile.close()
+
+
+def load_images(coord, data_dir, train=True):
     if not data_dir:
         data_dir = './Data/train/'
 
@@ -319,7 +344,8 @@ def load_images(coord, data_dir):
         queue_size=64, 
         min_after_dequeue=8,
         q_shape=SP2_BOX, 
-        n_threads=1)
+        n_threads=1,
+        train=train)
 
     print('Using data_dir{}, size {}'.format(data_dir, reader.corpus_size))
     return reader
@@ -333,7 +359,7 @@ def main(_):
     #sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
     
     is_training = tf.placeholder('bool', [], name='is_training')
-    weather_net = RESNET(sess, 
+    net = RESNET(sess, 
                 dim=2,
                 num_weather=4,
                 num_classes=13,
@@ -341,9 +367,11 @@ def main(_):
                 num_chans=[16,16,32,64],
                 use_bias=False, # defaults to using batch norm
                 bottleneck=True,
-                is_training=True)
-    
-    train(sess, weather_net, is_training)
+                is_training=is_training)
+    if FLAGS.is_training:
+        train(sess, net, is_training)
+    else:
+        predict(sess, net, is_training)
 
 
 if __name__ == '__main__':
