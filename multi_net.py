@@ -7,7 +7,7 @@ from config import Config
 import tensorflow as tf
 import datetime
 import numpy as np
-from ops import *
+from WRN_ops import *
 
 
 #tf.app.flags.DEFINE_integer('input_size', 224, "input image size")
@@ -25,7 +25,8 @@ class RESNET(object):
                 num_chans=[64,64,128,256,512],
                 use_bias=False, # defaults to using batch norm
                 bottleneck=True,
-                is_training=True):
+                is_training=True, 
+                keep_prob=0.5):
         self.c = Config()
         self.sess = sess
         self.dim = dim
@@ -40,6 +41,9 @@ class RESNET(object):
         self.c['is_training'] = tf.convert_to_tensor(is_training,
                                             dtype='bool',
                                             name='is_training')
+        self.c['keep_prob'] = tf.convert_to_tensor(keep_prob,
+                                            dtype=tf.float32,
+                                            name='keep_prob')
 
     def loss(self, logits, labels, name='loss'):
         cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, labels)
@@ -67,9 +71,9 @@ class RESNET(object):
                     self.c['stack_stride'] = 1
                 x = stack(x, self.c, self.dim)
 
-        with tf.variable_scope("multi_lab"):
+        with tf.variable_scope("multi_lab"):  #stack of convolution to finish off
             self.c['num_blocks'] = 1
-            self.c['block_filters_internal'] = 16
+            self.c['block_filters_internal'] = 512
             x_multi = stack(x, self.c, self.dim)
 
 

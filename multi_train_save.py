@@ -242,7 +242,7 @@ def train(sess, net, is_training):
                 if write_summary:
                     i.append(summary_op)
 
-                o = sess.run(i, { is_training: True, keep_prob: 0.5 })
+                o = sess.run(i, { is_training: True })
                 #import IPython; IPython.embed()
 
                 loss_value = o[1]
@@ -268,7 +268,7 @@ def train(sess, net, is_training):
 
                 # Run validation periodically
                 if step > 1 and step % 100 == 0:
-                    _, top1_error_value, mscore_value = sess.run([val_op, top1_error, m_score], { is_training: False, keep_prob: 1})
+                    _, top1_error_value, mscore_value = sess.run([val_op, top1_error, m_score], { is_training: False })
                     #pp, ll = sess.run([predictions, labels], {is_training:False})
                     #print('Predictions: ', pp)
                     #print('labels: ', ll)
@@ -341,7 +341,7 @@ def predict(sess, net, is_training, prefix='test_', append=False):
     outfile = open(fname, 'a')
     try:
         for i in range(corpus_size):
-            weather_scores, multi_scores, image_id = sess.run([wpred, mpred, img_id], { is_training: False, keep_prob: 1 })
+            weather_scores, multi_scores, image_id = sess.run([wpred, mpred, img_id], { is_training: False })
             #import IPython; IPython.embed()
             label_str = get_predictions(weather_scores, multi_scores, weathers, classes)
             print(prefix+str(image_id[0])+','+label_str+'\n')
@@ -383,38 +383,15 @@ def main(_):
     #sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
     
     is_training = tf.placeholder('bool', [], name='is_training')
-    # for resnet 101: num_blocks=[3, 4, 23, 3]
-    # for resnet 152: num_blocks=[3, 8, 36, 3]
-    # resnet50 = RESNET(sess, 
-    #             dim=2,
-    #             num_weather=4,
-    #             num_classes=13,
-    #             num_blocks=[3, 4, 6, 3],  # first chan is not a block
-    #             num_chans=[32,32,64,128,256],
-    #             use_bias=False, # defaults to using batch norm
-    #             bottleneck=True,
-    #             is_training=is_training)
-
-    WRN40_2 = RESNET(sess, 
+    net = RESNET(sess, 
                 dim=2,
                 num_weather=4,
                 num_classes=13,
-                num_blocks=[2, 3, 3, 2],  # first chan is not a block
-                num_chans=[128,128,256,512,1024],
+                num_blocks=[3, 4, 3],  # first chan is not a block
+                num_chans=[16,16,32,64],
                 use_bias=False, # defaults to using batch norm
-                bottleneck=False,
+                bottleneck=True,
                 is_training=is_training)
-
-    # net = RESNET(sess, 
-    #             dim=2,
-    #             num_weather=4,
-    #             num_classes=13,
-    #             num_blocks=[3, 4, 4, 3],  # first chan is not a block
-    #             num_chans=[16,16,32,64,128],
-    #             use_bias=False, # defaults to using batch norm
-    #             bottleneck=True,
-    #             is_training=is_training)
-    net = WRN40_2
     if FLAGS.is_training:
         train(sess, net, is_training)
     else:
