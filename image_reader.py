@@ -102,12 +102,13 @@ class Reader(object):
     def __init__(self,
                  data_dir,
                  coord,
+                 train=True, 
                  threshold=None,
                  queue_size=16, 
                  min_after_dequeue=4,
                  q_shape=None,
                  pattern='*.tif', 
-                 n_threads=1,
+                 n_threads=2,
                  multi=True,
                  label_file="./Data/train/train_v2.csv"):
         self.data_dir = data_dir
@@ -134,7 +135,10 @@ class Reader(object):
                                              [tf.float32, tf.int32],
                                              shapes=[self.q_shape,self.label_shape])
         self.enqueue = self.queue.enqueue([self.sample_placeholder, self.label_placeholder])
-        self.labels_df = load_label_df(label_file, multi=multi)
+        if train:
+            self.labels_df = load_label_df(label_file, multi=multi)
+        else:
+            self.labels_df = None
 
     def dequeue(self, num_elements):
         images, labels = self.queue.dequeue_many(num_elements)

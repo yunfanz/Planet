@@ -37,7 +37,7 @@ def test(sess, net, is_training, validation=False):
     reader = load_images(coord, FLAGS.data_dir)
     corpus_size = reader.corpus_size
     #import IPython; IPython.embed()
-    batch, labels = reader.dequeue(FLAGS.batch_size)
+    batch, _ = reader.dequeue(FLAGS.batch_size)
     global_step = tf.get_variable('global_step', [],
                                   initializer=tf.constant_initializer(0),
                                   trainable=False)
@@ -46,9 +46,9 @@ def test(sess, net, is_training, validation=False):
                                   trainable=False)
 
 
-    logits = net.inference(batch)
+    wlogits, mlogits = net.inference(batch)
     #loss_ = net.loss(logits, labels)
-    predictions = tf.nn.softmax(logits)
+    wpredictions = tf.nn.softmax(wlogits)
     #import IPython; IPython.embed()
     #top1_error = top_k_error(predictions, labels, 1)
 
@@ -61,14 +61,12 @@ def test(sess, net, is_training, validation=False):
     sess.run(init)
 
     summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
-
-    if FLAGS.resume:
-        latest = tf.train.latest_checkpoint(FLAGS.train_dir)
-        if not latest:
-            print("No checkpoint to continue from in", FLAGS.train_dir)
-            sys.exit(1)
-        print("resume", latest)
-        saver.restore(sess, latest)
+    latest = tf.train.latest_checkpoint(FLAGS.train_dir)
+    if not latest:
+        print("No checkpoint to continue from in", FLAGS.train_dir)
+        sys.exit(1)
+    print("resume", latest)
+    saver.restore(sess, latest)
 
     
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
@@ -138,7 +136,7 @@ def train(sess, net, is_training):
     #import IPython; IPython.embed() 
     wloss_ = net.loss(logits_weather, labels[:,0], name='weather_loss')
     mloss_ = tf.add_n([net.loss(logits_multi[:,i], labels[:,i+1], name='multi_loss'+str(i)) for i in range(13)])
-    loss_ = wloss_ + 0.2 * mloss_
+    loss_ = wloss_ + 0.08 * mloss_
     predictions = tf.nn.softmax(logits_weather)
     #import IPython; IPython.embed()
     top1_error = top_k_error(predictions, labels[:,0], 1)
@@ -166,6 +164,8 @@ def train(sess, net, is_training):
     opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate,beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
     grads = opt.compute_gradients(loss_)
+    #wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows
+    #mgrads = opt.compute_gradients(0.05 * mloss_)
     for grad, var in grads:
         if grad is not None and not FLAGS.minimal_summaries:
             tf.histogram_summary(var.op.name + '/gradients', grad)
@@ -262,13 +262,24 @@ def train(sess, net, is_training):
         coord.request_stop()
         coord.join(threads)
 
+def get_predictions(mlogits):
+    classes = ["primary", "agriculture", "water", "road", "cultivation", "habitation", "bare_ground", 
+                "slash_burn", "conventional_mine", "artisinal_mine", "selective_logging", 
+                "blooming", "blow_down"]
+    label_str = ""
+    for i in range(len(classes)):
+        prediction = tf.nn.softmax(mlogits[:,i])
+        if prediction[1]> 0.5:
+            label_str += classes[i] + ' '
+    return label_str
+
 def predict(sess, net):
 
     if not os.path.exists(FLAGS.train_dir):
         os.makedirs(FLAGS.train_dir)
     
     coord = tf.train.Coordinator()
-    reader = load_dcm(coord, FLAGS.data_dir)
+    reader = load_images(coord, FLAGS.data_dir)
     corpus_size = reader.corpus_size
     #import IPython; IPython.embed()
     train_batch, labels = reader.dequeue(FLAGS.batch_size)
@@ -280,7 +291,8 @@ def predict(sess, net):
         train_batch = tf.transpose(train_batch, [3,1,2,0])  #treat slice index as sub_batch index
 
     logits = net.inference(train_batch)
-    predictions = tf.nn.softmax(logits)
+    #predictions = tf.nn.softmax(logits)
+    label_str = get_predictions(logits[:,1:])
     init = tf.initialize_all_variables()
     #import IPython; IPython.embed()
     sess.run(init)
@@ -316,7 +328,7 @@ def load_images(coord, data_dir):
 def main(_):
 
     sessconfig = tf.ConfigProto()
-    sessconfig.gpu_options.allow_growth = True
+    sessconfig.gpu_options.allow_growth = False
     sess = tf.Session(config=sessconfig)
     #sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
     
