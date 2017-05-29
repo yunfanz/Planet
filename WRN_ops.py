@@ -23,6 +23,11 @@ UPDATE_OPS_COLLECTION = 'resnet_update_ops'  # must be grouped with training o
 
 #tf.app.flags.DEFINE_integer('input_size', 224, "input image size")
 
+#leaky relu
+def lrelu(x, leak=0.2, name="lrelu"):
+    f1 = 0.5 * (1 + leak)
+    f2 = 0.5 * (1 - leak)
+    return f1 * x + f2 * abs(x)
 
 activation = tf.nn.relu
 
