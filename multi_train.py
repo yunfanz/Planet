@@ -120,7 +120,7 @@ def _scoring(tp, fp, fn):
     return (1 + b**2)*(p*r)/(b**2*p + r)
 
 def get_m_score(mlogits, labels):
-    tp, fn, fp = 0., 0., 0.
+    tp, fn, fp = 0, 0, 0
     for i in range(13):
         mpred = tf.cast(tf.round(tf.nn.softmax(mlogits[:,i])), tf.int32)
         #import IPython; IPython.embed()
@@ -130,6 +130,9 @@ def get_m_score(mlogits, labels):
         # tp += tf.tensordot(mpred[:,1], labels[:,i+1])
         # fp += tf.tensordot(mpred[:,1], 1 - labels[:,i+1])
         # fn += tf.tensordot(1 - mpred[:,1], labels[:,i+1])
+    tp = tf.cast(tp, tf.float32)
+    fp = tf.cast(fp, tf.float32)
+    fn = tf.cast(fn, tf.float32)
 
     return _scoring(tp, fp, fn)
 
@@ -180,11 +183,13 @@ def train(sess, net, is_training, keep_prob):
     tf.scalar_summary('val_top1_error_avg', top1_error_avg)
     tf.scalar_summary('m_score_avg', m_score_avg)
 
-    tf.scalar_summary('learning_rate', FLAGS.learning_rate)
+    
     ###
-    #opt = tf.train.MomentumOptimizer(FLAGS.learning_rate, MOMENTUM)
+    learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
+    tf.scalar_summary('learning_rate', learning_rate)
+    opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM)
     #opt = tf.train.GradientDescentOptimizer(learning_rate=FLAGS.learning_rate)
-    opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
+    #opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
     grads = opt.compute_gradients(loss_)
     #wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows
@@ -245,7 +250,7 @@ def train(sess, net, is_training, keep_prob):
                 if write_summary:
                     i.append(summary_op)
 
-                o = sess.run(i, { is_training: True, keep_prob: 0.5 })
+                o = sess.run(i, { is_training: True, keep_prob: 0.5, learning_rate: FLAGS.learning_rate })
                 #import IPython; IPython.embed()
 
                 loss_value = o[1]
@@ -271,7 +276,8 @@ def train(sess, net, is_training, keep_prob):
 
                 # Run validation periodically
                 if step > 1 and step % 100 == 0:
-                    _, top1_error_value, mscore_value = sess.run([val_op, top1_error, m_score], { is_training: False, keep_prob: 1})
+                    _, top1_error_value, mscore_value = sess.run([val_op, top1_error, m_score], 
+                        { is_training: False, keep_prob: 1})
                     #pp, ll = sess.run([predictions, labels], {is_training:False})
                     #print('Predictions: ', pp)
                     #print('labels: ', ll)
@@ -399,11 +405,11 @@ def main(_):
     #             bottleneck=True,
     #             is_training=is_training)
 
-    WRN40_2 = RESNET(sess, 
+    WRN = RESNET(sess, 
                 dim=2,
                 num_weather=4,
                 num_classes=13,
-                num_blocks=[2, 3, 3, 2],  # first chan is not a block
+                num_blocks=[1, 2, 3, 1],  # first chan is not a block
                 num_chans=[128,128,256,512,1024],
                 use_bias=False, # defaults to using batch norm
                 bottleneck=False,
@@ -418,7 +424,7 @@ def main(_):
     #             use_bias=False, # defaults to using batch norm
     #             bottleneck=True,
     #             is_training=is_training)
-    net = WRN40_2
+    net = WRN
     if FLAGS.is_training:
         train(sess, net, is_training, keep_prob)
     else:
