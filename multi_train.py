@@ -116,11 +116,11 @@ def test(sess, net, is_training, validation=False):
 def _scoring(tp, fp, fn):
     p = tp/(tp + fp)
     r = tp/(tp + fn)
-    b = 2
+    b = 2.
     return (1 + b**2)*(p*r)/(b**2*p + r)
 
 def get_m_score(mlogits, labels):
-    tp, fn, fp = 0, 0, 0
+    tp, fn, fp = 0., 0., 0.
     for i in range(13):
         mpred = tf.cast(tf.round(tf.nn.softmax(mlogits[:,i])), tf.int32)
         #import IPython; IPython.embed()

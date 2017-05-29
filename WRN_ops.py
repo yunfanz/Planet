@@ -91,8 +91,7 @@ def block(x, c, dim=2):
                 c['conv_filters_out'] = filters_out
                 shortcut = bn(shortcut, c)  #try turning this off
                 shortcut = conv(shortcut, c, dim=dim)
-                
-
+            
         return activation(x + shortcut)
             
     else:  #preactivation without bottleneck, plus dropout
