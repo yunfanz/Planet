@@ -369,7 +369,7 @@ def load_images(coord, data_dir, train=True):
         coord,
         pattern='*.tif',
         queue_size=64, 
-        min_after_dequeue=8,
+        min_after_dequeue=FLAGS.batch_size,
         q_shape=SP2_BOX, 
         n_threads=1,
         train=train)
