@@ -133,7 +133,7 @@ def get_m_score(mlogits, labels):
 
     return _scoring(tp, fp, fn)
 
-def train(sess, net, is_training):
+def train(sess, net, is_training, keep_prob):
 
     if not os.path.exists(FLAGS.train_dir):
         os.makedirs(FLAGS.train_dir)
@@ -298,7 +298,7 @@ def get_predictions(weather_pred, mpred, weathers, classes):
     label_str = ' '.join(labels)
     return label_str.strip()
 
-def predict(sess, net, is_training, prefix='test_', append=False):
+def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
 
     if not os.path.exists(FLAGS.train_dir):
         os.makedirs(FLAGS.train_dir)
@@ -386,6 +386,7 @@ def main(_):
     #sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
     
     is_training = tf.placeholder('bool', [], name='is_training')
+    keep_prob = tf.placeholder(tf.float32, [], name='keep_prob')
     # for resnet 101: num_blocks=[3, 4, 23, 3]
     # for resnet 152: num_blocks=[3, 8, 36, 3]
     # resnet50 = RESNET(sess, 
@@ -419,9 +420,9 @@ def main(_):
     #             is_training=is_training)
     net = WRN40_2
     if FLAGS.is_training:
-        train(sess, net, is_training)
+        train(sess, net, is_training, keep_prob)
     else:
-        predict(sess, net, is_training, prefix='test_', append=False)
+        predict(sess, net, is_training, keep_prob, prefix='test_', append=False)
 
 
 if __name__ == '__main__':
