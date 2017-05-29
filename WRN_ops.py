@@ -80,6 +80,17 @@ def block(x, c, dim=2):
             assert c['stride'] == 1
             x = bn(x, c)
             x = conv(x, c, dim=dim)
+
+        with tf.variable_scope('shortcut'):
+            if filters_out != filters_in or c['block_stride'] != 1:
+                c['ksize'] = 1
+                c['stride'] = c['block_stride']
+                c['conv_filters_out'] = filters_out
+                shortcut = bn(shortcut, c)  #try turning this off
+                shortcut = conv(shortcut, c, dim=dim)
+                
+
+        return activation(x + shortcut)
             
     else:
         with tf.variable_scope('A'):
@@ -98,19 +109,22 @@ def block(x, c, dim=2):
             assert c['ksize'] == 3
             assert c['stride'] == 1
             x = bn(x, c)
+            x = activation(x)
             x = conv(x, c, dim=dim)
+
+        with tf.variable_scope('shortcut'):
+            if filters_out != filters_in or c['block_stride'] != 1:
+                c['ksize'] = 1
+                c['stride'] = c['block_stride']
+                c['conv_filters_out'] = filters_out
+                shortcut = bn(shortcut, c)  #try turning this off
+                shortcut = conv(shortcut, c, dim=dim)
+                
+
+        return x + shortcut
             
 
-    with tf.variable_scope('shortcut'):
-        if filters_out != filters_in or c['block_stride'] != 1:
-            c['ksize'] = 1
-            c['stride'] = c['block_stride']
-            c['conv_filters_out'] = filters_out
-            shortcut = bn(shortcut, c)  #try turning this off
-            shortcut = conv(shortcut, c, dim=dim)
-            
 
-    return activation(x + shortcut)
 
 
 def bn(x, c):

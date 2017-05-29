@@ -229,7 +229,7 @@ def train(sess, net, is_training, keep_prob):
     #import IPython; IPython.embed()
     try:
         for epoch in range(FLAGS.epoch):
-            if epoch % 7 == 0 and epoch > 1:
+            if epoch % 3 == 0 and epoch > 1:
                 FLAGS.learning_rate /=  5. 
             if FLAGS.num_per_epoch:
                 batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
