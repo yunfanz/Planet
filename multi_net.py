@@ -52,7 +52,7 @@ class RESNET(object):
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
 
         loss_ = tf.add_n([cross_entropy_mean] + regularization_losses)
-        tf.scalar_summary(name, loss_)
+        #tf.scalar_summary(name, loss_)
 
         return loss_
 

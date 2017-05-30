@@ -12,7 +12,7 @@ tf.app.flags.DEFINE_string('train_dir', './tmp/multi_train/',
                            """and checkpoint.""")
 tf.app.flags.DEFINE_string('data_dir', 'Data/train/',
                            """Directory where data is located""")
-tf.app.flags.DEFINE_float('learning_rate', 0.001, "learning rate.")
+tf.app.flags.DEFINE_float('learning_rate', 0.002, "learning rate.")
 tf.app.flags.DEFINE_integer('batch_size', 8, "batch size")
 tf.app.flags.DEFINE_integer('num_per_epoch', None, "max steps per epoch")
 tf.app.flags.DEFINE_integer('epoch', 1, "number of epochs to train")
@@ -234,7 +234,7 @@ def train(sess, net, is_training, keep_prob):
     #import IPython; IPython.embed()
     try:
         for epoch in range(FLAGS.epoch):
-            if epoch % 3 == 0 and epoch > 1:
+            if epoch % 6 == 0 and epoch > 1:
                 FLAGS.learning_rate /=  5. 
             if FLAGS.num_per_epoch:
                 batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
@@ -270,7 +270,7 @@ def train(sess, net, is_training, keep_prob):
                     summary_writer.add_summary(summary_str, step)
 
                 # Save the model checkpoint periodically.
-                if step > 1 and step % 500 == 0:
+                if step > 1 and step % 1000 == 0:
                     checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=global_step)
 
