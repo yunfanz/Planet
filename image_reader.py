@@ -36,6 +36,15 @@ def find_files(directory, pattern='*.tif', sortby="auto"):
     return files
 
 
+def _augment_img(img):
+    rands = np.random.random(3)
+    if rands[0] < 0.5:
+        img = np.fliplr(img)
+    if rands[1] < 0.5:
+        img = np.flipud(img)
+    if rands[2] < 0.5:
+        img = np.transpose(img, axes=[1,0,2])
+    return img
 
 def load_image(directory, sortby="img_id"):
     '''Generator that yields pixel_array from dataset, and
@@ -45,6 +54,7 @@ def load_image(directory, sortby="img_id"):
         img = skimage.io.imread(filename, plugin='tifffile').astype(np.float32)
         #img = (img - 4000.)/5000. 
         img *= (1./10000)
+        img = _augment_img(img)
         img_id = filename.split('/')[-1].split('.')[0]
         yield img, img_id
 

@@ -140,6 +140,18 @@ def get_m_score(mlogits, labels):
 
     return _scoring(tp, fp, fn)
 
+def _augment(train_batch):
+    for i, image in enumerate(train_batch):
+        image = tf.image.random_flip_up_down(image, seed=None)
+        image = tf.image.random_flip_left_right(image, seed=None)
+        k = np.random.randint(0,4)
+        p = np.random.random()
+        if p < 0.5:
+            image = tf.image.transpose_image(image)
+        image = tf.image.rot90(image, k=k)
+        train_batch[i] = image
+    return train_batch
+    
 def train(sess, net, is_training, keep_prob):
 
     if not os.path.exists(FLAGS.train_dir):
