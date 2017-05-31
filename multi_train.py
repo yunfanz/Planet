@@ -14,6 +14,7 @@ tf.app.flags.DEFINE_string('data_dir', 'Data/train/',
                            """Directory where data is located""")
 tf.app.flags.DEFINE_float('learning_rate', 0.1, "learning rate.")
 tf.app.flags.DEFINE_float('pred_prob', 0.5, "prediction probability")
+tf.app.flags.DEFINE_integer('num_gpus', 1, "number of gpus used")
 tf.app.flags.DEFINE_integer('batch_size', 8, "batch size")
 tf.app.flags.DEFINE_integer('num_per_epoch', None, "max steps per epoch")
 tf.app.flags.DEFINE_integer('epoch', 1, "number of epochs to train")
@@ -250,7 +251,7 @@ def train(sess, net, is_training, keep_prob):
     #import IPython; IPython.embed()
     try:
         for epoch in range(FLAGS.epoch):
-            if epoch % 8 == 0 and epoch > 1:
+            if epoch % 20 == 0 and epoch > 1:
                 FLAGS.learning_rate /=  10. 
             if FLAGS.num_per_epoch:
                 batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
