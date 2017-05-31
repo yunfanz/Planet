@@ -12,7 +12,7 @@ tf.app.flags.DEFINE_string('train_dir', './tmp/multi_train/',
                            """and checkpoint.""")
 tf.app.flags.DEFINE_string('data_dir', 'Data/train/',
                            """Directory where data is located""")
-tf.app.flags.DEFINE_float('learning_rate', 0.002, "learning rate.")
+tf.app.flags.DEFINE_float('learning_rate', 0.1, "learning rate.")
 tf.app.flags.DEFINE_float('pred_prob', 0.5, "prediction probability")
 tf.app.flags.DEFINE_integer('batch_size', 8, "batch size")
 tf.app.flags.DEFINE_integer('num_per_epoch', None, "max steps per epoch")
@@ -204,8 +204,8 @@ def train(sess, net, is_training, keep_prob):
     learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
     tf.scalar_summary('learning_rate', learning_rate)
     #opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM)
-    #opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
-    opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
+    opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
+    #opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
     grads = opt.compute_gradients(loss_)
     #wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows

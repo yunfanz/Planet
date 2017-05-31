@@ -46,7 +46,7 @@ def _augment_img(img):
         img = np.transpose(img, axes=[1,0,2])
     return img
 
-def load_image(directory, sortby="img_id"):
+def load_image(directory, sortby="img_id", train=False):
     '''Generator that yields pixel_array from dataset, and
     additionally the ID of the corresponding patient.'''
     files = find_files(directory, sortby=sortby)
@@ -54,7 +54,7 @@ def load_image(directory, sortby="img_id"):
         img = skimage.io.imread(filename, plugin='tifffile').astype(np.float32)
         #img = (img - 4000.)/5000. 
         img *= (1./10000)
-        img = _augment_img(img)
+        if train: img = _augment_img(img)
         img_id = filename.split('/')[-1].split('.')[0]
         yield img, img_id
 
@@ -171,7 +171,7 @@ class Reader(object):
         stop = False
         # Go through the dataset multiple times
         while not stop:
-            iterator = load_image(self.data_dir)
+            iterator = load_image(self.data_dir, train=self.train)
             for img, img_id in iterator:
                 #print(filename)
                 if self.train:
