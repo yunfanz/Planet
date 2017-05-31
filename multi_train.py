@@ -13,6 +13,7 @@ tf.app.flags.DEFINE_string('train_dir', './tmp/multi_train/',
 tf.app.flags.DEFINE_string('data_dir', 'Data/train/',
                            """Directory where data is located""")
 tf.app.flags.DEFINE_float('learning_rate', 0.002, "learning rate.")
+tf.app.flags.DEFINE_float('pred_prob', 0.5, "prediction probability")
 tf.app.flags.DEFINE_integer('batch_size', 8, "batch size")
 tf.app.flags.DEFINE_integer('num_per_epoch', None, "max steps per epoch")
 tf.app.flags.DEFINE_integer('epoch', 1, "number of epochs to train")
@@ -187,8 +188,8 @@ def train(sess, net, is_training, keep_prob):
     ###
     learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
     tf.scalar_summary('learning_rate', learning_rate)
-    opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM)
-    #opt = tf.train.GradientDescentOptimizer(learning_rate=FLAGS.learning_rate)
+    #opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM)
+    opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
     #opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
     grads = opt.compute_gradients(loss_)
@@ -234,8 +235,8 @@ def train(sess, net, is_training, keep_prob):
     #import IPython; IPython.embed()
     try:
         for epoch in range(FLAGS.epoch):
-            if epoch % 6 == 0 and epoch > 1:
-                FLAGS.learning_rate /=  5. 
+            if epoch % 8 == 0 and epoch > 1:
+                FLAGS.learning_rate /=  10. 
             if FLAGS.num_per_epoch:
                 batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
             else:
@@ -298,7 +299,7 @@ def get_predictions(weather_pred, mpred, weathers, classes):
     label_str= weathers[np.argmax(weather_pred)] + ' '
     for i in range(len(classes)):
         prediction = mpred[i]
-        if prediction[1]> 0.3:
+        if prediction[1]> FLAGS.pred_prob:
             label_str += classes[i] + ' '
     labels = sorted(label_str.split(' '))
     label_str = ' '.join(labels)
@@ -308,7 +309,7 @@ def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
 
     if not os.path.exists(FLAGS.train_dir):
         os.makedirs(FLAGS.train_dir)
-    fname = FLAGS.train_dir+"/results.csv"
+    fname = FLAGS.train_dir+"/results_"+str(FLAGS.pred_prob)+".csv"
     if not append:
         outfile = open(fname, 'w')
         outfile.write("image_name,tags\n")
@@ -395,25 +396,25 @@ def main(_):
     keep_prob = tf.placeholder(tf.float32, [], name='keep_prob')
     # for resnet 101: num_blocks=[3, 4, 23, 3]
     # for resnet 152: num_blocks=[3, 8, 36, 3]
-    # resnet50 = RESNET(sess, 
-    #             dim=2,
-    #             num_weather=4,
-    #             num_classes=13,
-    #             num_blocks=[3, 4, 6, 3],  # first chan is not a block
-    #             num_chans=[32,32,64,128,256],
-    #             use_bias=False, # defaults to using batch norm
-    #             bottleneck=True,
-    #             is_training=is_training)
+    resnet50 = RESNET(sess, 
+                 dim=2,
+                 num_weather=4,
+                 num_classes=13,
+                 num_blocks=[3, 4, 6, 3],  # first chan is not a block
+                 num_chans=[32,32,64,128,256],
+                 use_bias=False, # defaults to using batch norm
+                 bottleneck=True,
+                 is_training=is_training)
 
-    WRN = RESNET(sess, 
-                dim=2,
-                num_weather=4,
-                num_classes=13,
-                num_blocks=[1, 2, 3, 1],  # first chan is not a block
-                num_chans=[128,128,256,512,1024],
-                use_bias=False, # defaults to using batch norm
-                bottleneck=False,
-                is_training=is_training)
+    #WRN = RESNET(sess, 
+    #            dim=2,
+    #            num_weather=4,
+    #            num_classes=13,
+    #            num_blocks=[1, 2, 3, 1],  # first chan is not a block
+    #            num_chans=[128,128,256,512,1024],
+    #            use_bias=False, # defaults to using batch norm
+    #            bottleneck=False,
+    #            is_training=is_training)
 
     # net = RESNET(sess, 
     #             dim=2,
@@ -424,11 +425,14 @@ def main(_):
     #             use_bias=False, # defaults to using batch norm
     #             bottleneck=True,
     #             is_training=is_training)
-    net = WRN
+    net = resnet50
     if FLAGS.is_training:
         train(sess, net, is_training, keep_prob)
     else:
-        predict(sess, net, is_training, keep_prob, prefix='test_', append=False)
+        if FLAGS.data_dir.endswith("test") or FLAGS.data_dir.endswith("test/"):
+            predict(sess, net, is_training, keep_prob, prefix='test_', append=False)
+        else:
+            predict(sess, net, is_training, keep_prob, prefix='file_', append=True)
 
 
 if __name__ == '__main__':
