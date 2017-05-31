@@ -118,7 +118,10 @@ def _scoring(tp, fp, fn):
     p = tp/(tp + fp)
     r = tp/(tp + fn)
     b = 2.
-    return (1 + b**2)*(p*r)/(b**2*p + r)
+    if p ==0. and r ==0.:
+        return 0
+    else:
+        return (1 + b**2)*(p*r)/(b**2*p + r)
 
 def get_m_score(mlogits, labels):
     tp, fn, fp = 0, 0, 0
@@ -189,8 +192,8 @@ def train(sess, net, is_training, keep_prob):
     learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
     tf.scalar_summary('learning_rate', learning_rate)
     #opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM)
-    opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
-    #opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
+    #opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
+    opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
     grads = opt.compute_gradients(loss_)
     #wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows
@@ -297,6 +300,7 @@ def train(sess, net, is_training, keep_prob):
 def get_predictions(weather_pred, mpred, weathers, classes, batched=True):
 
     if batched:
+        #print(weather_pred.shape, mpred.shape)
         string_list = []
         for n in range(weather_pred.shape[0]):
             string_list.append(get_predictions(weather_pred[n], mpred[n], weathers, classes, batched=False))
@@ -333,7 +337,8 @@ def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
 
     wlogits, mlogits = net.inference(test_batch)
     wpred = tf.nn.softmax(wlogits)
-    mpred = [tf.nn.softmax(mlogits[:, i]) for i in range(13)]
+    #mpred = [tf.nn.softmax(mlogits[:, i]) for i in range(13)]
+    mpred = tf.nn.softmax(mlogits)
     weathers = ["cloudy", "partly_cloudy", "haze", "clear"]
     classes = ["primary", "agriculture", "water", "road", "cultivation", "habitation", "bare_ground", 
                 "slash_burn", "conventional_mine", "artisinal_mine", "selective_logging", 
@@ -363,9 +368,11 @@ def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
             add_cnt = FLAGS.batch_size
             weather_scores, multi_scores, image_id = sess.run([wpred, mpred, img_id], { is_training: False, keep_prob: 1 })
             #import IPython; IPython.embed()
-            string_list = get_predictions(weather_scores, multi_scores, weathers, classes)
+            #multi_scores = np.swapaxes(np.asarray(multi_scores),0,1)
+            multi_scores = np.asarray(multi_scores)
+            string_list = get_predictions(weather_scores, multi_scores, weathers, classes, batched=True)
             for n, label_str in enumerate(string_list):
-                print(prefix+str(image_id[n])+','+label_str)
+                #print(prefix+str(image_id[n])+','+label_str)
                 if n > 1:
                     if image_id[n] < image_id[n-1]:
                         add_cnt = n
@@ -374,8 +381,8 @@ def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
             sample_cnt += add_cnt
 
 
-            if i % 200 == 0:
-                print("{}/{}".format(i, corpus_size))
+            if sample_cnt % 200 == 0:
+                print("{}/{}".format(sample_cnt, corpus_size))
     finally:
         print('Finished, output see {}'.format(fname))
         coord.request_stop()
@@ -392,7 +399,7 @@ def load_images(coord, data_dir, train=True):
         data_dir,
         coord,
         pattern='*.tif',
-        queue_size=64, 
+        queue_size=FLAGS.batch_size*8, 
         min_after_dequeue=FLAGS.batch_size,
         q_shape=SP2_BOX, 
         n_threads=1,
