@@ -294,16 +294,22 @@ def train(sess, net, is_training, keep_prob):
         coord.request_stop()
         coord.join(threads)
 
-def get_predictions(weather_pred, mpred, weathers, classes):
+def get_predictions(weather_pred, mpred, weathers, classes, batched=True):
 
-    label_str= weathers[np.argmax(weather_pred)] + ' '
-    for i in range(len(classes)):
-        prediction = mpred[i]
-        if prediction[1]> FLAGS.pred_prob:
-            label_str += classes[i] + ' '
-    labels = sorted(label_str.split(' '))
-    label_str = ' '.join(labels)
-    return label_str.strip()
+    if batched:
+        string_list = []
+        for n in range(weather_pred.shape[0]):
+            string_list.append(get_predictions(weather_pred[n], mpred[n], weathers, classes, batched=False))
+        return string_list
+    else:
+        label_str= weathers[np.argmax(weather_pred)] + ' '
+        for i in range(len(classes)):
+            prediction = mpred[i]
+            if prediction[1]> FLAGS.pred_prob:
+                label_str += classes[i] + ' '
+        labels = sorted(label_str.split(' '))
+        label_str = ' '.join(labels)
+        return label_str.strip()
 
 def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
 
@@ -320,14 +326,14 @@ def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
     reader = load_images(coord, FLAGS.data_dir, train=False)
     corpus_size = reader.corpus_size
     #import IPython; IPython.embed()
-    test_batch, img_id = reader.dequeue(1)
+    test_batch, img_id = reader.dequeue(FLAGS.batch_size)
     global_step = tf.get_variable('global_step', [],
                                   initializer=tf.constant_initializer(0),
                                   trainable=False)
 
     wlogits, mlogits = net.inference(test_batch)
     wpred = tf.nn.softmax(wlogits)
-    mpred = [tf.nn.softmax(mlogits[0, i]) for i in range(13)]
+    mpred = [tf.nn.softmax(mlogits[:, i]) for i in range(13)]
     weathers = ["cloudy", "partly_cloudy", "haze", "clear"]
     classes = ["primary", "agriculture", "water", "road", "cultivation", "habitation", "bare_ground", 
                 "slash_burn", "conventional_mine", "artisinal_mine", "selective_logging", 
@@ -349,13 +355,24 @@ def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
     reader.start_threads(sess)
 
     outfile = open(fname, 'a')
+    sample_cnt = 0
     try:
-        for i in range(corpus_size):
+        while True:
+            if sample_cnt >= corpus_size-1:
+                break
+            add_cnt = FLAGS.batch_size
             weather_scores, multi_scores, image_id = sess.run([wpred, mpred, img_id], { is_training: False, keep_prob: 1 })
             #import IPython; IPython.embed()
-            label_str = get_predictions(weather_scores, multi_scores, weathers, classes)
-            print(prefix+str(image_id[0])+','+label_str+'\n')
-            outfile.write(prefix+str(image_id[0])+','+label_str+'\n')
+            string_list = get_predictions(weather_scores, multi_scores, weathers, classes)
+            for n, label_str in enumerate(string_list):
+                print(prefix+str(image_id[n])+','+label_str)
+                if n > 1:
+                    if image_id[n] < image_id[n-1]:
+                        add_cnt = n
+                        break
+                outfile.write(prefix+str(image_id[n])+','+label_str+'\n')
+            sample_cnt += add_cnt
+
 
             if i % 200 == 0:
                 print("{}/{}".format(i, corpus_size))
