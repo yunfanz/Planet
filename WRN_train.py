@@ -1,5 +1,5 @@
 import tensorflow as tf
-from mmulti_net import RESNET, UPDATE_OPS_COLLECTION, RESNET_VARIABLES, MOVING_AVERAGE_DECAY
+from multi_net import RESNET, UPDATE_OPS_COLLECTION, RESNET_VARIABLES, MOVING_AVERAGE_DECAY
 from image_reader import Reader, get_corpus_size
 import numpy as np
 import os, sys
@@ -208,13 +208,20 @@ def train(sess, net, is_training, keep_prob):
     #opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
     #opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
-    grads = opt.compute_gradients(loss_)
-    #wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows
-    #mgrads = opt.compute_gradients(0.05 * mloss_)
-    for grad, var in grads:
+    #grads = opt.compute_gradients(loss_)
+    wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows
+    mgrads = opt.compute_gradients(0.08 * mloss_)
+    #import IPython; IPython.embed()
+    for grad, var in wgrads:
         if grad is not None and not FLAGS.minimal_summaries:
-            tf.histogram_summary(var.op.name + '/gradients', grad)
-    apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
+            tf.histogram_summary('w_'+var.op.name + '/gradients', grad)
+    for grad, var in mgrads:
+        if grad is not None and not FLAGS.minimal_summaries:
+            tf.histogram_summary('m_'+var.op.name + '/gradients', grad)
+    w_gradient_op = opt.apply_gradients(wgrads, global_step=global_step)
+    m_gradient_op = opt.apply_gradients(mgrads)
+    apply_gradient_op = tf.group(w_gradient_op, m_gradient_op)
+    #apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
 
     if not FLAGS.minimal_summaries:
         # Display the training images in the visualizer.
@@ -448,6 +455,7 @@ def main(_):
                 num_weather=4,
                 num_classes=13,
                 num_blocks=[1, 2, 3, 1],  # first chan is not a block
+                #num_chans=[16,16,32,64,128],
                 num_chans=[128,128,256,512,1024],
                 use_bias=False, # defaults to using batch norm
                 bottleneck=False,
