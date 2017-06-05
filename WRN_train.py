@@ -213,9 +213,13 @@ def train(sess, net, is_training, keep_prob):
     mgrads = opt.compute_gradients(0.08 * mloss_)
     #import IPython; IPython.embed()
     for grad, var in wgrads:
+        if "scale" in var.op.name:
+            grad /= 2.
         if grad is not None and not FLAGS.minimal_summaries:
             tf.histogram_summary('w_'+var.op.name + '/gradients', grad)
     for grad, var in mgrads:
+        if "scale" in var.op.name:
+            grad /= 2.
         if grad is not None and not FLAGS.minimal_summaries:
             tf.histogram_summary('m_'+var.op.name + '/gradients', grad)
     w_gradient_op = opt.apply_gradients(wgrads, global_step=global_step)
