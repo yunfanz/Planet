@@ -1,5 +1,5 @@
 import tensorflow as tf
-from multi_net import RESNET, UPDATE_OPS_COLLECTION, RESNET_VARIABLES, MOVING_AVERAGE_DECAY
+from mmulti_net import RESNET, UPDATE_OPS_COLLECTION, RESNET_VARIABLES, MOVING_AVERAGE_DECAY
 from image_reader import Reader, get_corpus_size
 import numpy as np
 import os, sys

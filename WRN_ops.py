@@ -89,7 +89,7 @@ def block(x, c, dim=2):
                 c['ksize'] = 1
                 c['stride'] = c['block_stride']
                 c['conv_filters_out'] = filters_out
-                shortcut = bn(shortcut, c)  #try turning this off
+                #shortcut = bn(shortcut, c)  #try turning this off
                 shortcut = conv(shortcut, c, dim=dim)
             
         return activation(x + shortcut)
@@ -119,7 +119,7 @@ def block(x, c, dim=2):
                 c['ksize'] = 1
                 c['stride'] = c['block_stride']
                 c['conv_filters_out'] = filters_out
-                shortcut = bn(shortcut, c)  #try turning this off
+                #shortcut = bn(shortcut, c)  #try turning this off
                 shortcut = conv(shortcut, c, dim=dim)
                 
 
