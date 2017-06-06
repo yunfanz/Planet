@@ -1,5 +1,5 @@
-import skimage.io  # bug. need to import this before tensorflow
-import skimage.transform  # bug. need to import this before tensorflow
+#import skimage.io  # bug. need to import this before tensorflow
+#import skimage.transform  # bug. need to import this before tensorflow
 import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.training import moving_averages
@@ -46,7 +46,7 @@ class RESNET(object):
                                             name='keep_prob')
 
     def loss(self, logits, labels, name='loss'):
-        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, labels)
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
         cross_entropy_mean = tf.reduce_mean(cross_entropy)
      
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -71,7 +71,7 @@ class RESNET(object):
                     self.c['stack_stride'] = 1
                 x = stack(x, self.c, self.dim)
 
-        with tf.variable_scope("multi_lab"):  #stack of convolution to finish off
+        with tf.variable_scope("lab_multi"):  #stack of convolution to finish off
             self.c['num_blocks'] = 1
             self.c['block_filters_internal'] = 512
             x_multi = stack(x, self.c, self.dim)
@@ -85,7 +85,7 @@ class RESNET(object):
             x = tf.reduce_mean(x, reduction_indices=[1, 2, 3], name="avg_pool")
 
         if self.num_weather != None:
-            with tf.variable_scope('fc'):
+            with tf.variable_scope('fc_weather'):
                 x = fc(x, self.c)
         if self.num_classes != None:
             with tf.variable_scope('fc_multi'):

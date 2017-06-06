@@ -30,91 +30,7 @@ def top_k_error(predictions, labels, k):
     num_correct = tf.reduce_sum(in_top1)
     return (batch_size - num_correct) / batch_size
     #return num_correct
-def test(sess, net, is_training, validation=False):
 
-    if not os.path.exists(FLAGS.train_dir):
-        os.makedirs(FLAGS.train_dir)
-    
-    coord = tf.train.Coordinator()
-    reader = load_images(coord, FLAGS.data_dir)
-    corpus_size = reader.corpus_size
-    #import IPython; IPython.embed()
-    batch, _ = reader.dequeue(FLAGS.batch_size)
-    global_step = tf.get_variable('global_step', [],
-                                  initializer=tf.constant_initializer(0),
-                                  trainable=False)
-    val_step = tf.get_variable('val_step', [],
-                                  initializer=tf.constant_initializer(0),
-                                  trainable=False)
-
-
-    wlogits, mlogits = net.inference(batch)
-    #loss_ = net.loss(logits, labels)
-    wpredictions = tf.nn.softmax(wlogits)
-    #import IPython; IPython.embed()
-    #top1_error = top_k_error(predictions, labels, 1)
-
-    saver = tf.train.Saver(tf.all_variables())
-
-    summary_op = tf.merge_all_summaries()
-
-    init = tf.initialize_all_variables()
-    #import IPython; IPython.embed()
-    sess.run(init)
-
-    summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
-    latest = tf.train.latest_checkpoint(FLAGS.train_dir)
-    if not latest:
-        print("No checkpoint to continue from in", FLAGS.train_dir)
-        sys.exit(1)
-    print("resume", latest)
-    saver.restore(sess, latest)
-
-    
-    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    reader.start_threads(sess)
-    try:
-        if FLAGS.num_per_epoch:
-            batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
-        else:
-            batch_idx = corpus_size // FLAGS.batch_size
-        for idx in range(batch_idx):
-            start_time = time.time()
-            step = sess.run(global_step)
-
-            o = sess.run(i, { is_training: True })
-
-            loss_value = o[1]
-
-            duration = time.time() - start_time
-
-            assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
-
-            if step % 1 == 0:
-                examples_per_sec = FLAGS.batch_size / float(duration)
-                format_str = ('Epoch %d, [%d / %d], loss = %.2f (%.1f examples/sec; %.3f '
-                              'sec/batch)')
-                print(format_str % (epoch, idx, batch_idx, loss_value, examples_per_sec, duration))
-
-            if write_summary:
-                summary_str = o[2]
-                summary_writer.add_summary(summary_str, step)
-
-            _, top1_error_value = sess.run([val_op, top1_error], { is_training: False })
-            #pp, ll = sess.run([predictions, labels], {is_training:False})
-            #print('Predictions: ', pp)
-            #print('labels: ', ll)
-            print('Validation top1 error %.2f' % top1_error_value)
-
-    except KeyboardInterrupt:
-        # Introduce a line break after ^C is displayed so save message
-        # is on its own line.
-        print()
-        #G
-    finally:
-        print('Finished, output see {}'.format(FLAGS.train_dir))
-        coord.request_stop()
-        coord.join(threads)
 def _scoring(tp, fp, fn):
     p = tp/(tp + fp)
     r = tp/(tp + fn)
@@ -126,15 +42,19 @@ def _scoring(tp, fp, fn):
 
 def get_m_score(mlogits, labels):
     tp, fn, fp = 0, 0, 0
-    for i in range(13):
-        mpred = tf.cast(tf.round(tf.nn.softmax(mlogits[:,i])), tf.int32)
-        #import IPython; IPython.embed()
-        tp += tf.reduce_sum(tf.mul(mpred[:,1], labels[:,i+1]))
-        fp += tf.reduce_sum(tf.mul(mpred[:,1], 1 - labels[:,i+1]))
-        fn += tf.reduce_sum(tf.mul(1 - mpred[:,1], labels[:,i+1]))
-        # tp += tf.tensordot(mpred[:,1], labels[:,i+1])
-        # fp += tf.tensordot(mpred[:,1], 1 - labels[:,i+1])
-        # fn += tf.tensordot(1 - mpred[:,1], labels[:,i+1])
+    # for i in range(13):
+    #     mpred = tf.cast(tf.round(tf.nn.softmax(mlogits[:,i])), tf.int32)
+    #     #import IPython; IPython.embed()
+    #     # tp += tf.reduce_sum(tf.mul(mpred[:,1], labels[:,i+1]))
+    #     # fp += tf.reduce_sum(tf.mul(mpred[:,1], 1 - labels[:,i+1]))
+    #     # fn += tf.reduce_sum(tf.mul(1 - mpred[:,1], labels[:,i+1]))
+    #     import IPython; IPython.embed()
+    mpred = tf.cast(tf.round(tf.nn.softmax(mlogits)), tf.int32)
+    mlabels = labels[:,1:]
+    contract_axes = [[0],[0]]
+    tp = tf.tensordot(mpred, mlabels, axes=contract_axes)
+    fp = tf.tensordot(mpred, 1 - mlabels, axes=contract_axes)
+    fn = tf.tensordot(1 - mpred, mlabels, axes=contract_axes)
     tp = tf.cast(tp, tf.float32)
     fp = tf.cast(fp, tf.float32)
     fn = tf.cast(fn, tf.float32)
@@ -184,48 +104,60 @@ def train(sess, net, is_training, keep_prob):
 
     ema = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY, global_step)
     tf.add_to_collection(UPDATE_OPS_COLLECTION, ema.apply([wloss_]))
-    tf.scalar_summary('wloss_avg', ema.average(wloss_))
+    #tf.scalar_summary('wloss_avg', ema.average(wloss_))
+    tf.summary.scalar('wloss_avg', ema.average(wloss_))
     
     tf.add_to_collection(UPDATE_OPS_COLLECTION, ema.apply([mloss_]))
-    tf.scalar_summary('mloss_avg', ema.average(mloss_))
+    tf.summary.scalar('mloss_avg', ema.average(mloss_))
     # loss_avg
     tf.add_to_collection(UPDATE_OPS_COLLECTION, ema.apply([loss_]))
-    tf.scalar_summary('loss_avg', ema.average(loss_))
+    tf.summary.scalar('loss_avg', ema.average(loss_))
 
     # validation stats
     ema = tf.train.ExponentialMovingAverage(0.99, val_step)
     val_op = tf.group(val_step.assign_add(1), ema.apply([top1_error]), ema.apply([m_score]))
     top1_error_avg = ema.average(top1_error)
     m_score_avg = ema.average(m_score)
-    tf.scalar_summary('val_top1_error_avg', top1_error_avg)
-    tf.scalar_summary('m_score_avg', m_score_avg)
+    tf.summary.scalar('val_top1_error_avg', top1_error_avg)
+    tf.summary.scalar('m_score_avg', m_score_avg)
 
     
     ###
     learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
-    tf.scalar_summary('learning_rate', learning_rate)
+    tf.summary.scalar('learning_rate', learning_rate)
     opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM)
+    copt = tf.train.MomentumOptimizer(learning_rate/2, MOMENTUM)
     #opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
     #opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
     #grads = opt.compute_gradients(loss_)
-    wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows
-    mgrads = opt.compute_gradients(0.08 * mloss_)
-    #import IPython; IPython.embed()
-    for grad, var in wgrads:
-        if "scale" in var.op.name:
-            grad /= 2.
-        if grad is not None and not FLAGS.minimal_summaries:
-            tf.histogram_summary('w_'+var.op.name + '/gradients', grad)
-    for grad, var in mgrads:
-        if "scale" in var.op.name:
-            grad /= 2.
-        if grad is not None and not FLAGS.minimal_summaries:
-            tf.histogram_summary('m_'+var.op.name + '/gradients', grad)
-    w_gradient_op = opt.apply_gradients(wgrads, global_step=global_step)
-    m_gradient_op = opt.apply_gradients(mgrads)
-    apply_gradient_op = tf.group(w_gradient_op, m_gradient_op)
+    wvars = [var for var in tf.trainable_variables() if '_weather' in var.name]
+    mvars = [var for var in tf.trainable_variables() if '_multi' in var.name]
+    cvars = [var for var in tf.trainable_variables() 
+                    if ('_multi' not in var.name) and ('_weather' not in var.name)]
+    # wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows
+    # mgrads = opt.compute_gradients(0.08 * mloss_)
+    # #import IPython; IPython.embed()
+    # for grad, var in wgrads:
+    #     if "scale" in var.op.name:
+    #         grad /= 2.
+    #     if grad is not None and not FLAGS.minimal_summaries:
+    #         tf.histogram_summary('w_'+var.op.name + '/gradients', grad)
+    # for grad, var in mgrads:
+    #     if "scale" in var.op.name:
+    #         grad /= 2.
+    #     if grad is not None and not FLAGS.minimal_summaries:
+    #         tf.histogram_summary('m_'+var.op.name + '/gradients', grad)
+    # w_gradient_op = opt.apply_gradients(wgrads, global_step=global_step)
+    # m_gradient_op = opt.apply_gradients(mgrads)
+    # apply_gradient_op = tf.group(w_gradient_op, m_gradient_op)
     #apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
+    w_gradient_op = opt.minimize(wloss_, var_list=wvars, global_step=global_step)
+    m_gradient_op = opt.minimize(mloss_, var_list=wvars)
+    c_gradient_op1 = copt.minimize(wloss_, var_list=cvars)
+    c_gradient_op2 = copt.minimize(mloss_, var_list=cvars)
+    apply_gradient_op = tf.group(w_gradient_op, m_gradient_op, c_gradient_op1, c_gradient_op2)
+    #import IPython; IPython.embed()
 
     if not FLAGS.minimal_summaries:
         # Display the training images in the visualizer.
@@ -238,15 +170,15 @@ def train(sess, net, is_training, keep_prob):
     batchnorm_updates_op = tf.group(*batchnorm_updates)
     train_op = tf.group(apply_gradient_op, batchnorm_updates_op)
 
-    saver = tf.train.Saver(tf.all_variables())
+    saver = tf.train.Saver(tf.global_variables())
 
-    summary_op = tf.merge_all_summaries()
+    summary_op = tf.summary.merge_all()
 
-    init = tf.initialize_all_variables()
+    init = tf.global_variables_initializer()
     #import IPython; IPython.embed()
     sess.run(init)
 
-    summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
+    summary_writer = tf.summary.FileWriter(FLAGS.train_dir, sess.graph)
 
     if FLAGS.resume:
         latest = tf.train.latest_checkpoint(FLAGS.train_dir)
@@ -434,10 +366,10 @@ def load_images(coord, data_dir, train=True):
 
 
 def main(_):
-
     sessconfig = tf.ConfigProto()
     sessconfig.gpu_options.allow_growth = False
     sess = tf.Session(config=sessconfig)
+    #import IPython; IPython.embed()
     #sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
     
     is_training = tf.placeholder('bool', [], name='is_training')

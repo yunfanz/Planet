@@ -1,10 +1,8 @@
-import skimage.io  # bug. need to import this before tensorflow
-import skimage.transform  # bug. need to import this before tensorflow
+#import skimage.io  # bug. need to import this before tensorflow
+#import skimage.transform  # bug. need to import this before tensorflow
 import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.training import moving_averages
-
-
 import datetime
 import numpy as np
 import os
@@ -146,7 +144,7 @@ def bn(x, c):
                          initializer=tf.zeros_initializer)
     gamma = _get_variable('gamma',
                           params_shape,
-                          initializer=tf.ones_initializer)
+                          initializer=tf.ones_initializer())
 
     moving_mean = _get_variable('moving_mean',
                                 params_shape,
@@ -154,7 +152,7 @@ def bn(x, c):
                                 trainable=False)
     moving_variance = _get_variable('moving_variance',
                                     params_shape,
-                                    initializer=tf.ones_initializer,
+                                    initializer=tf.ones_initializer(),
                                     trainable=False)
 
     # These ops will only be preformed when training.
@@ -206,7 +204,7 @@ def _get_variable(name,
         regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
     else:
         regularizer = None
-    collections = [tf.GraphKeys.VARIABLES, RESNET_VARIABLES]
+    collections = [tf.GraphKeys.GLOBAL_VARIABLES, RESNET_VARIABLES]
     return tf.get_variable(name,
                            shape=shape,
                            initializer=initializer,
