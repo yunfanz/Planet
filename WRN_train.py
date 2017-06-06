@@ -49,9 +49,9 @@ def get_m_score(mlogits, labels):
     #     # fp += tf.reduce_sum(tf.mul(mpred[:,1], 1 - labels[:,i+1]))
     #     # fn += tf.reduce_sum(tf.mul(1 - mpred[:,1], labels[:,i+1]))
     #     import IPython; IPython.embed()
-    mpred = tf.cast(tf.round(tf.nn.softmax(mlogits)), tf.int32)
+    mpred = tf.cast(tf.round(tf.nn.softmax(mlogits[:,:,1])), tf.int32)
     mlabels = labels[:,1:]
-    contract_axes = [[0],[0]]
+    contract_axes = [[0, 1],[0, 1]]
     tp = tf.tensordot(mpred, mlabels, axes=contract_axes)
     fp = tf.tensordot(mpred, 1 - mlabels, axes=contract_axes)
     fn = tf.tensordot(1 - mpred, mlabels, axes=contract_axes)
