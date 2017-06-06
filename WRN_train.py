@@ -95,7 +95,7 @@ def train(sess, net, is_training, keep_prob):
     #import IPython; IPython.embed() 
     wloss_ = net.loss(logits_weather, labels[:,0], name='weather_loss')
     mloss_ = tf.add_n([net.loss(logits_multi[:,i], labels[:,i+1], name='multi_loss'+str(i)) for i in range(13)])
-    loss_ = 0.5 * wloss_ + 0.5 * mloss_
+    loss_ = wloss_ + 0.08 * mloss_
     predictions = tf.nn.softmax(logits_weather)
     #import IPython; IPython.embed()
     top1_error = top_k_error(predictions, labels[:,0], 1)
@@ -131,6 +131,7 @@ def train(sess, net, is_training, keep_prob):
     #opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
     #grads = opt.compute_gradients(loss_)
+    tvars = tf.trainable_variables()
     wvars = [var for var in tf.trainable_variables() if '_weather' in var.name]
     mvars = [var for var in tf.trainable_variables() if '_multi' in var.name]
     cvars = [var for var in tf.trainable_variables() 
@@ -152,12 +153,14 @@ def train(sess, net, is_training, keep_prob):
     # m_gradient_op = opt.apply_gradients(mgrads)
     # apply_gradient_op = tf.group(w_gradient_op, m_gradient_op)
     #apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
-    w_gradient_op = opt.minimize(wloss_, var_list=wvars, global_step=global_step)
-    m_gradient_op = opt.minimize(mloss_, var_list=wvars)
+    w_gradient_op = opt.minimize(loss_, var_list=wvars, global_step=global_step)
+    m_gradient_op = opt.minimize(loss_, var_list=mvars)
     #c_gradient_op1 = copt.minimize(wloss_, var_list=cvars)
     #c_gradient_op2 = copt.minimize(mloss_, var_list=cvars)
     c_gradient_op = opt.minimize(loss_, var_list=cvars)
-    apply_gradient_op = tf.group(w_gradient_op, m_gradient_op, c_gradient_op)
+    #apply_gradient_op = tf.group(w_gradient_op, m_gradient_op, c_gradient_op)
+    grads = opt.compute_gradients(loss_)
+    apply_gradient_op = opt.apply_gradients(grads)
     #import IPython; IPython.embed()
 
     if not FLAGS.minimal_summaries:
