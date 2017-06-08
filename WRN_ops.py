@@ -11,9 +11,9 @@ import time
 MOVING_AVERAGE_DECAY = 0.9997
 BN_DECAY = MOVING_AVERAGE_DECAY
 BN_EPSILON = 0.001
-CONV_WEIGHT_DECAY = 0.00004
+CONV_WEIGHT_DECAY = 0.0005
 CONV_WEIGHT_STDDEV = 0.1
-FC_WEIGHT_DECAY = 0.00004
+FC_WEIGHT_DECAY = 0.0005
 FC_WEIGHT_STDDEV = 0.01
 RESNET_VARIABLES = 'resnet_variables'
 UPDATE_OPS_COLLECTION = 'resnet_update_ops'  # must be grouped with training o
@@ -133,7 +133,7 @@ def bn(x, c):
 
     if c['use_bias']:
         bias = _get_variable('bias', params_shape,
-                             initializer=tf.zeros_initializer)
+                             initializer=tf.zeros_initializer())
         return x + bias
 
 
@@ -141,14 +141,14 @@ def bn(x, c):
 
     beta = _get_variable('beta',
                          params_shape,
-                         initializer=tf.zeros_initializer)
+                         initializer=tf.zeros_initializer())
     gamma = _get_variable('gamma',
                           params_shape,
                           initializer=tf.ones_initializer())
 
     moving_mean = _get_variable('moving_mean',
                                 params_shape,
-                                initializer=tf.zeros_initializer,
+                                initializer=tf.zeros_initializer(),
                                 trainable=False)
     moving_variance = _get_variable('moving_variance',
                                     params_shape,
@@ -184,10 +184,10 @@ def fc(x, c):
     weights = _get_variable('weights',
                             shape=[num_units_in, num_units_out],
                             initializer=weights_initializer,
-                            weight_decay=FC_WEIGHT_STDDEV)
+                            weight_decay=FC_WEIGHT_DECAY)
     biases = _get_variable('biases',
                            shape=[num_units_out],
-                           initializer=tf.zeros_initializer)
+                           initializer=tf.zeros_initializer())
     x = tf.nn.xw_plus_b(x, weights, biases)
     return x
 

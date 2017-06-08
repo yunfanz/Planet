@@ -125,7 +125,7 @@ def train(sess, net, is_training, keep_prob):
     ###
     learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
     tf.summary.scalar('learning_rate', learning_rate)
-    opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM)
+    opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM, use_nesterov=True)
     #copt = tf.train.MomentumOptimizer(learning_rate/2, MOMENTUM)
     #opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
     #opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
@@ -160,7 +160,7 @@ def train(sess, net, is_training, keep_prob):
     c_gradient_op = opt.minimize(loss_, var_list=cvars)
     #apply_gradient_op = tf.group(w_gradient_op, m_gradient_op, c_gradient_op)
     grads = opt.compute_gradients(loss_)
-    apply_gradient_op = opt.apply_gradients(grads)
+    apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
     #import IPython; IPython.embed()
 
     if not FLAGS.minimal_summaries:
@@ -168,7 +168,7 @@ def train(sess, net, is_training, keep_prob):
         #tf.image_summary('images', images)
 
         for var in tf.trainable_variables():
-            tf.histogram_summary(var.op.name, var)
+            tf.summary.histogram(var.op.name, var)
 
     batchnorm_updates = tf.get_collection(UPDATE_OPS_COLLECTION)
     batchnorm_updates_op = tf.group(*batchnorm_updates)
@@ -198,8 +198,8 @@ def train(sess, net, is_training, keep_prob):
     #import IPython; IPython.embed()
     try:
         for epoch in range(FLAGS.epoch):
-            if epoch == 50 or epoch == 80:
-                FLAGS.learning_rate /=  8. 
+            if epoch == 80 or epoch == 120:
+                FLAGS.learning_rate /=  10. 
             if FLAGS.num_per_epoch:
                 batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
             else:

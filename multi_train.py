@@ -1,5 +1,5 @@
 import tensorflow as tf
-from mmulti_net import RESNET, UPDATE_OPS_COLLECTION, RESNET_VARIABLES, MOVING_AVERAGE_DECAY
+from multi_net import RESNET, UPDATE_OPS_COLLECTION, RESNET_VARIABLES, MOVING_AVERAGE_DECAY
 from image_reader import Reader, get_corpus_size
 import numpy as np
 import os, sys
@@ -129,9 +129,9 @@ def get_m_score(mlogits, labels):
     for i in range(13):
         mpred = tf.cast(tf.round(tf.nn.softmax(mlogits[:,i])), tf.int32)
         #import IPython; IPython.embed()
-        tp += tf.reduce_sum(tf.mul(mpred[:,1], labels[:,i+1]))
-        fp += tf.reduce_sum(tf.mul(mpred[:,1], 1 - labels[:,i+1]))
-        fn += tf.reduce_sum(tf.mul(1 - mpred[:,1], labels[:,i+1]))
+        tp += tf.reduce_sum(tf.multiply(mpred[:,1], labels[:,i+1]))
+        fp += tf.reduce_sum(tf.multiply(mpred[:,1], 1 - labels[:,i+1]))
+        fn += tf.reduce_sum(tf.multiply(1 - mpred[:,1], labels[:,i+1]))
         # tp += tf.tensordot(mpred[:,1], labels[:,i+1])
         # fp += tf.tensordot(mpred[:,1], 1 - labels[:,i+1])
         # fn += tf.tensordot(1 - mpred[:,1], labels[:,i+1])
@@ -184,27 +184,27 @@ def train(sess, net, is_training, keep_prob):
 
     ema = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY, global_step)
     tf.add_to_collection(UPDATE_OPS_COLLECTION, ema.apply([wloss_]))
-    tf.scalar_summary('wloss_avg', ema.average(wloss_))
+    tf.summary.scalar('wloss_avg', ema.average(wloss_))
     
     tf.add_to_collection(UPDATE_OPS_COLLECTION, ema.apply([mloss_]))
-    tf.scalar_summary('mloss_avg', ema.average(mloss_))
+    tf.summary.scalar('mloss_avg', ema.average(mloss_))
     # loss_avg
     tf.add_to_collection(UPDATE_OPS_COLLECTION, ema.apply([loss_]))
-    tf.scalar_summary('loss_avg', ema.average(loss_))
+    tf.summary.scalar('loss_avg', ema.average(loss_))
 
     # validation stats
     ema = tf.train.ExponentialMovingAverage(0.99, val_step)
     val_op = tf.group(val_step.assign_add(1), ema.apply([top1_error]), ema.apply([m_score]))
     top1_error_avg = ema.average(top1_error)
     m_score_avg = ema.average(m_score)
-    tf.scalar_summary('val_top1_error_avg', top1_error_avg)
-    tf.scalar_summary('m_score_avg', m_score_avg)
+    tf.summary.scalar('val_top1_error_avg', top1_error_avg)
+    tf.summary.scalar('m_score_avg', m_score_avg)
 
     
     ###
     learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
-    tf.scalar_summary('learning_rate', learning_rate)
-    opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM)
+    tf.summary.scalar('learning_rate', learning_rate)
+    opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM, use_nesterov=True)
     #opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
     #opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
@@ -213,7 +213,10 @@ def train(sess, net, is_training, keep_prob):
     #mgrads = opt.compute_gradients(0.05 * mloss_)
     for grad, var in grads:
         if grad is not None and not FLAGS.minimal_summaries:
-            tf.histogram_summary(var.op.name + '/gradients', grad)
+            try:
+                tf.summary.histogram(var.op.name + '/gradients', grad)
+            except:
+                print("grads is NAN")
     apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
 
     if not FLAGS.minimal_summaries:
@@ -221,21 +224,25 @@ def train(sess, net, is_training, keep_prob):
         #tf.image_summary('images', images)
 
         for var in tf.trainable_variables():
-            tf.histogram_summary(var.op.name, var)
+            tf.summary.histogram(var.op.name, var)
 
     batchnorm_updates = tf.get_collection(UPDATE_OPS_COLLECTION)
     batchnorm_updates_op = tf.group(*batchnorm_updates)
     train_op = tf.group(apply_gradient_op, batchnorm_updates_op)
 
-    saver = tf.train.Saver(tf.all_variables())
+    saver = tf.train.Saver(tf.global_variables())
 
-    summary_op = tf.merge_all_summaries()
+    # summary_op = tf.merge_all_summaries()
+    # init = tf.initialize_all_variables()
+    # #import IPython; IPython.embed()
+    # sess.run(init)
+    # summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
 
-    init = tf.initialize_all_variables()
+    summary_op = tf.summary.merge_all()
+    init = tf.global_variables_initializer()
     #import IPython; IPython.embed()
     sess.run(init)
-
-    summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
+    summary_writer = tf.summary.FileWriter(FLAGS.train_dir, sess.graph)
 
     if FLAGS.resume:
         latest = tf.train.latest_checkpoint(FLAGS.train_dir)
@@ -251,7 +258,7 @@ def train(sess, net, is_training, keep_prob):
     #import IPython; IPython.embed()
     try:
         for epoch in range(FLAGS.epoch):
-            if epoch == 50 or epoch == 80:
+            if epoch == 80 or epoch == 120:
                 FLAGS.learning_rate /=  10. 
             if FLAGS.num_per_epoch:
                 batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
@@ -359,10 +366,10 @@ def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
     # label_str = get_predictions(wpred, mpred, weathers, classes)
 
     
-    init = tf.initialize_all_variables()
+    init = tf.global_variables_initializer()
     #import IPython; IPython.embed()
     sess.run(init)
-    saver = tf.train.Saver(tf.all_variables())
+    saver = tf.train.Saver(tf.global_variables())
     latest = tf.train.latest_checkpoint(FLAGS.train_dir)
     if not latest:
         print("No checkpoint to continue from in", FLAGS.train_dir)

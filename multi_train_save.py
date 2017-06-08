@@ -12,7 +12,9 @@ tf.app.flags.DEFINE_string('train_dir', './tmp/multi_train/',
                            """and checkpoint.""")
 tf.app.flags.DEFINE_string('data_dir', 'Data/train/',
                            """Directory where data is located""")
-tf.app.flags.DEFINE_float('learning_rate', 0.001, "learning rate.")
+tf.app.flags.DEFINE_float('learning_rate', 0.1, "learning rate.")
+tf.app.flags.DEFINE_float('pred_prob', 0.5, "prediction probability")
+tf.app.flags.DEFINE_integer('num_gpus', 1, "number of gpus used")
 tf.app.flags.DEFINE_integer('batch_size', 8, "batch size")
 tf.app.flags.DEFINE_integer('num_per_epoch', None, "max steps per epoch")
 tf.app.flags.DEFINE_integer('epoch', 1, "number of epochs to train")
@@ -116,8 +118,11 @@ def test(sess, net, is_training, validation=False):
 def _scoring(tp, fp, fn):
     p = tp/(tp + fp)
     r = tp/(tp + fn)
-    b = 2
-    return (1 + b**2)*(p*r)/(b**2*p + r)
+    b = 2.
+    if p ==0. and r ==0.:
+        return 0
+    else:
+        return (1 + b**2)*(p*r)/(b**2*p + r)
 
 def get_m_score(mlogits, labels):
     tp, fn, fp = 0, 0, 0
@@ -130,10 +135,25 @@ def get_m_score(mlogits, labels):
         # tp += tf.tensordot(mpred[:,1], labels[:,i+1])
         # fp += tf.tensordot(mpred[:,1], 1 - labels[:,i+1])
         # fn += tf.tensordot(1 - mpred[:,1], labels[:,i+1])
+    tp = tf.cast(tp, tf.float32)
+    fp = tf.cast(fp, tf.float32)
+    fn = tf.cast(fn, tf.float32)
 
     return _scoring(tp, fp, fn)
 
-def train(sess, net, is_training):
+def _augment(train_batch):
+    for i, image in enumerate(train_batch):
+        image = tf.image.random_flip_up_down(image, seed=None)
+        image = tf.image.random_flip_left_right(image, seed=None)
+        k = np.random.randint(0,4)
+        p = np.random.random()
+        if p < 0.5:
+            image = tf.image.transpose_image(image)
+        image = tf.image.rot90(image, k=k)
+        train_batch[i] = image
+    return train_batch
+    
+def train(sess, net, is_training, keep_prob):
 
     if not os.path.exists(FLAGS.train_dir):
         os.makedirs(FLAGS.train_dir)
@@ -180,10 +200,13 @@ def train(sess, net, is_training):
     tf.scalar_summary('val_top1_error_avg', top1_error_avg)
     tf.scalar_summary('m_score_avg', m_score_avg)
 
-    tf.scalar_summary('learning_rate', FLAGS.learning_rate)
+    
     ###
-    #opt = tf.train.MomentumOptimizer(FLAGS.learning_rate, MOMENTUM)
-    opt = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate,beta1=0.9, beta2=0.999, epsilon=1e-8)
+    learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
+    tf.scalar_summary('learning_rate', learning_rate)
+    opt = tf.train.MomentumOptimizer(learning_rate, MOMENTUM)
+    #opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
+    #opt = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.9, beta2=0.999, epsilon=1e-8)
     ###
     grads = opt.compute_gradients(loss_)
     #wgrads = opt.compute_gradients(wloss_) #no need to separate, tensorflow knows
@@ -228,6 +251,8 @@ def train(sess, net, is_training):
     #import IPython; IPython.embed()
     try:
         for epoch in range(FLAGS.epoch):
+            if epoch == 50 or epoch == 80:
+                FLAGS.learning_rate /=  10. 
             if FLAGS.num_per_epoch:
                 batch_idx = min(FLAGS.num_per_epoch, corpus_size) // FLAGS.batch_size
             else:
@@ -242,7 +267,7 @@ def train(sess, net, is_training):
                 if write_summary:
                     i.append(summary_op)
 
-                o = sess.run(i, { is_training: True })
+                o = sess.run(i, { is_training: True, keep_prob: 0.5, learning_rate: FLAGS.learning_rate })
                 #import IPython; IPython.embed()
 
                 loss_value = o[1]
@@ -262,13 +287,14 @@ def train(sess, net, is_training):
                     summary_writer.add_summary(summary_str, step)
 
                 # Save the model checkpoint periodically.
-                if step > 1 and step % 500 == 0:
+                if step > 1 and step % 1000 == 0:
                     checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=global_step)
 
                 # Run validation periodically
                 if step > 1 and step % 100 == 0:
-                    _, top1_error_value, mscore_value = sess.run([val_op, top1_error, m_score], { is_training: False })
+                    _, top1_error_value, mscore_value = sess.run([val_op, top1_error, m_score], 
+                        { is_training: False, keep_prob: 1})
                     #pp, ll = sess.run([predictions, labels], {is_training:False})
                     #print('Predictions: ', pp)
                     #print('labels: ', ll)
@@ -284,22 +310,29 @@ def train(sess, net, is_training):
         coord.request_stop()
         coord.join(threads)
 
-def get_predictions(weather_pred, mpred, weathers, classes):
+def get_predictions(weather_pred, mpred, weathers, classes, batched=True):
 
-    label_str= weathers[np.argmax(weather_pred)] + ' '
-    for i in range(len(classes)):
-        prediction = mpred[i]
-        if prediction[1]> 0.3:
-            label_str += classes[i] + ' '
-    labels = sorted(label_str.split(' '))
-    label_str = ' '.join(labels)
-    return label_str.strip()
+    if batched:
+        #print(weather_pred.shape, mpred.shape)
+        string_list = []
+        for n in range(weather_pred.shape[0]):
+            string_list.append(get_predictions(weather_pred[n], mpred[n], weathers, classes, batched=False))
+        return string_list
+    else:
+        label_str= weathers[np.argmax(weather_pred)] + ' '
+        for i in range(len(classes)):
+            prediction = mpred[i]
+            if prediction[1]> FLAGS.pred_prob:
+                label_str += classes[i] + ' '
+        labels = sorted(label_str.split(' '))
+        label_str = ' '.join(labels)
+        return label_str.strip()
 
-def predict(sess, net, is_training, prefix='test_', append=False):
+def predict(sess, net, is_training, keep_prob, prefix='test_', append=False):
 
     if not os.path.exists(FLAGS.train_dir):
         os.makedirs(FLAGS.train_dir)
-    fname = FLAGS.train_dir+"/results.csv"
+    fname = FLAGS.train_dir+"/results_"+str(FLAGS.pred_prob)+".csv"
     if not append:
         outfile = open(fname, 'w')
         outfile.write("image_name,tags\n")
@@ -310,14 +343,15 @@ def predict(sess, net, is_training, prefix='test_', append=False):
     reader = load_images(coord, FLAGS.data_dir, train=False)
     corpus_size = reader.corpus_size
     #import IPython; IPython.embed()
-    test_batch, img_id = reader.dequeue(1)
+    test_batch, img_id = reader.dequeue(FLAGS.batch_size)
     global_step = tf.get_variable('global_step', [],
                                   initializer=tf.constant_initializer(0),
                                   trainable=False)
 
     wlogits, mlogits = net.inference(test_batch)
     wpred = tf.nn.softmax(wlogits)
-    mpred = [tf.nn.softmax(mlogits[0, i]) for i in range(13)]
+    #mpred = [tf.nn.softmax(mlogits[:, i]) for i in range(13)]
+    mpred = tf.nn.softmax(mlogits)
     weathers = ["cloudy", "partly_cloudy", "haze", "clear"]
     classes = ["primary", "agriculture", "water", "road", "cultivation", "habitation", "bare_ground", 
                 "slash_burn", "conventional_mine", "artisinal_mine", "selective_logging", 
@@ -339,16 +373,29 @@ def predict(sess, net, is_training, prefix='test_', append=False):
     reader.start_threads(sess)
 
     outfile = open(fname, 'a')
+    sample_cnt = 0
     try:
-        for i in range(corpus_size):
-            weather_scores, multi_scores, image_id = sess.run([wpred, mpred, img_id], { is_training: False })
+        while True:
+            if sample_cnt >= corpus_size-1:
+                break
+            add_cnt = FLAGS.batch_size
+            weather_scores, multi_scores, image_id = sess.run([wpred, mpred, img_id], { is_training: False, keep_prob: 1 })
             #import IPython; IPython.embed()
-            label_str = get_predictions(weather_scores, multi_scores, weathers, classes)
-            print(prefix+str(image_id[0])+','+label_str+'\n')
-            outfile.write(prefix+str(image_id[0])+','+label_str+'\n')
+            #multi_scores = np.swapaxes(np.asarray(multi_scores),0,1)
+            multi_scores = np.asarray(multi_scores)
+            string_list = get_predictions(weather_scores, multi_scores, weathers, classes, batched=True)
+            for n, label_str in enumerate(string_list):
+                #print(prefix+str(image_id[n])+','+label_str)
+                if n > 1:
+                    if image_id[n] < image_id[n-1]:
+                        add_cnt = n
+                        break
+                outfile.write(prefix+str(image_id[n])+','+label_str+'\n')
+            sample_cnt += add_cnt
 
-            if i % 200 == 0:
-                print("{}/{}".format(i, corpus_size))
+
+            if sample_cnt % 200 == 0:
+                print("{}/{}".format(sample_cnt, corpus_size))
     finally:
         print('Finished, output see {}'.format(fname))
         coord.request_stop()
@@ -365,8 +412,8 @@ def load_images(coord, data_dir, train=True):
         data_dir,
         coord,
         pattern='*.tif',
-        queue_size=64, 
-        min_after_dequeue=8,
+        queue_size=FLAGS.batch_size*8, 
+        min_after_dequeue=FLAGS.batch_size,
         q_shape=SP2_BOX, 
         n_threads=1,
         train=train)
@@ -383,19 +430,46 @@ def main(_):
     #sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
     
     is_training = tf.placeholder('bool', [], name='is_training')
-    net = RESNET(sess, 
-                dim=2,
-                num_weather=4,
-                num_classes=13,
-                num_blocks=[3, 4, 3],  # first chan is not a block
-                num_chans=[16,16,32,64],
-                use_bias=False, # defaults to using batch norm
-                bottleneck=True,
-                is_training=is_training)
+    keep_prob = tf.placeholder(tf.float32, [], name='keep_prob')
+    # for resnet 101: num_blocks=[3, 4, 23, 3]
+    # for resnet 152: num_blocks=[3, 8, 36, 3]
+    resnet50 = RESNET(sess, 
+                 dim=2,
+                 num_weather=4,
+                 num_classes=13,
+                 num_blocks=[3, 4, 6, 3],  # first chan is not a block
+                 num_chans=[32,32,64,128,256],
+                 use_bias=False, # defaults to using batch norm
+                 bottleneck=True,
+                 is_training=is_training)
+
+    #WRN = RESNET(sess, 
+    #            dim=2,
+    #            num_weather=4,
+    #            num_classes=13,
+    #            num_blocks=[1, 2, 3, 1],  # first chan is not a block
+    #            num_chans=[128,128,256,512,1024],
+    #            use_bias=False, # defaults to using batch norm
+    #            bottleneck=False,
+    #            is_training=is_training)
+
+    # net = RESNET(sess, 
+    #             dim=2,
+    #             num_weather=4,
+    #             num_classes=13,
+    #             num_blocks=[3, 4, 4, 3],  # first chan is not a block
+    #             num_chans=[16,16,32,64,128],
+    #             use_bias=False, # defaults to using batch norm
+    #             bottleneck=True,
+    #             is_training=is_training)
+    net = resnet50
     if FLAGS.is_training:
-        train(sess, net, is_training)
+        train(sess, net, is_training, keep_prob)
     else:
-        predict(sess, net, is_training, prefix='test_', append=False)
+        if FLAGS.data_dir.endswith("test") or FLAGS.data_dir.endswith("test/"):
+            predict(sess, net, is_training, keep_prob, prefix='test_', append=False)
+        else:
+            predict(sess, net, is_training, keep_prob, prefix='file_', append=True)
 
 
 if __name__ == '__main__':

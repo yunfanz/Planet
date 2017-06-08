@@ -46,7 +46,7 @@ class RESNET(object):
                                             name='keep_prob')
 
     def loss(self, logits, labels, name='loss'):
-        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
         cross_entropy_mean = tf.reduce_mean(cross_entropy)
      
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -79,10 +79,10 @@ class RESNET(object):
 
         # post-net
         if self.dim==2:
-            x = tf.reduce_mean(x, reduction_indices=[1, 2], name="avg_pool")
-            x_multi = tf.reduce_mean(x_multi, reduction_indices=[1, 2], name="avg_pool")
+            x = tf.reduce_mean(x, axis=[1, 2], name="avg_pool")
+            x_multi = tf.reduce_mean(x_multi, axis=[1, 2], name="avg_pool")
         elif self.dim == 3:
-            x = tf.reduce_mean(x, reduction_indices=[1, 2, 3], name="avg_pool")
+            x = tf.reduce_mean(x, axis=[1, 2, 3], name="avg_pool")
 
         if self.num_weather != None:
             with tf.variable_scope('fc_weather'):
@@ -131,7 +131,7 @@ class RESNET(object):
             x = stack(x, self.c)
 
         # post-net
-        x = tf.reduce_mean(x, reduction_indices=[1, 2], name="avg_pool")
+        x = tf.reduce_mean(x, axis=[1, 2], name="avg_pool")
 
         if self.c['num_classes'] != None:
             with tf.variable_scope('fc'):
